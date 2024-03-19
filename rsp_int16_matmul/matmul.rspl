@@ -1,0 +1,103 @@
+
+include "rsp_queue.inc"
+include "rdpq_macros.h"
+
+#define MAT_SIZE 24
+
+state
+{
+  vec16 MAT_L[MAT_SIZE]; // 8x8 Left Matrix
+  vec16 MAT_R[MAT_SIZE]; // 8x8 Right Matrix
+  vec16 MAT_RES[MAT_SIZE]; // 8x8 Resultant Matrix
+}
+
+macro mac(vec16 psum, vec16 row, vec16 col)
+{
+  psum = row * col;
+  // Use swizzle syntax to get sum
+  // first value is the sum, rest are junk
+  psum += psum.yywwYYWW;
+  psum += psum.zzzzZZZZ;
+  psum += psum.X;
+}
+
+
+/**
+ * 8x8 Matrix multiplication.
+ *
+ * @param addressMatOut RDRAM address where the resulting matrix will be stored (row-major)
+ * @param addressMatL RDRAM address of the left matrix (row-major)
+ * @param addressMatR RDRAM address of the right matrix (row-major)
+ */
+command<0> MatMul8x8(u32 addressMatOut, u32 addressMatL, u32 addressMatR)
+{
+  addressMatL &= 0xFFFFFF;
+  addressMatR &= 0xFFFFFF;
+  addressMatOut &= 0xFFFFFF;
+
+  // DMA matrices in
+  // DMA matrices in
+  dma_in(MAT_L, addressMatL);
+  dma_in(MAT_R, addressMatR);
+  dma_await(); // Ensure both matrices have been transferred before starting multiplication
+
+  // VU contains 32 128-bit SIMD registers
+  vec16 matR0 = load(MAT_R, 0x00);
+  vec16 matR1 = load(MAT_R, 0x10);
+  vec16 matR2 = load(MAT_R, 0x20);
+  vec16 matR3 = load(MAT_R, 0x30);
+  vec16 matR4 = load(MAT_R, 0x40);
+  vec16 matR5 = load(MAT_R, 0x50);
+  vec16 matR6 = load(MAT_R, 0x60);
+  vec16 matR7 = load(MAT_R, 0x70);
+
+  // DMA result out
+  u32 curr = MAT_RES;
+  u32 lrow = MAT_L;
+  u32 max_addr = curr + 120;
+  u32 iters = 0;
+  vec16 psum;
+
+  loop {
+    vec16 matL = load(lrow);
+
+    // row A * 1st col B
+    mac(psum, matL, matR0);
+    store(psum.x, curr, 0x00);
+
+    // row A * 2nd col B
+    mac(psum, matL, matR1);
+    store(psum.x, curr, 0x02);
+
+    // row A * 3rd col B
+    mac(psum, matL, matR2);
+    store(psum.x, curr, 0x04);
+
+    // row A * 4th col B
+    mac(psum, matL, matR3);
+    store(psum.x, curr, 0x06);
+
+    // row A * 5th col B
+    mac(psum, matL, matR4);
+    store(psum.x, curr, 0x08);
+
+    // row A * 6th col B
+    mac(psum, matL, matR5);
+    store(psum.x, curr, 0x0a);
+
+    // row A * 7th col B
+    mac(psum, matL, matR6);
+    store(psum.x, curr, 0x0c);
+
+    // row A * 8th col B
+    mac(psum, matL, matR7);
+    store(psum.x, curr, 0x0e);
+
+    // increment
+    lrow += 16;
+    curr += 16;
+  } while (curr < max_addr)
+
+  dma_out(MAT_RES, addressMatOut);
+  dma_await(); // Ensure the result matrix is written back to RDRAM
+}
