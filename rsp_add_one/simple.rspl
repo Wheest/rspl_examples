@@ -20,7 +20,6 @@ command<0> MatCopyIn(u32 addressMatC)
 
   // Perform DMA for Matrix C
   dma_in(MAT_C, addressMatC);
-  dma_await();
 
   // Add one to every element
   vec16 matL0 = load(MAT_C, 0x00);
@@ -39,5 +38,4 @@ command<1> MatCopyOut(u32 addressMatC)
 
   // Perform DMA for Matrix C
   dma_out(MAT_C, addressMatC);
-  dma_await();
  }

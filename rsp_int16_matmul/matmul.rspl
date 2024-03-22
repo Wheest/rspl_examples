@@ -2,7 +2,7 @@
 include "rsp_queue.inc"
 include "rdpq_macros.h"
 
-#define MAT_SIZE 24
+#define MAT_SIZE 8
 
 state
 {
@@ -39,7 +39,6 @@ command<0> MatMul8x8(u32 addressMatOut, u32 addressMatL, u32 addressMatR)
   // DMA matrices in
   dma_in(MAT_L, addressMatL);
   dma_in(MAT_R, addressMatR);
-  dma_await(); // Ensure both matrices have been transferred before starting multiplication
 
   // VU contains 32 128-bit SIMD registers
   vec16 matR0 = load(MAT_R, 0x00);
@@ -99,5 +98,4 @@ command<0> MatMul8x8(u32 addressMatOut, u32 addressMatL, u32 addressMatR)
   } while (curr < max_addr)
 
   dma_out(MAT_RES, addressMatOut);
-  dma_await(); // Ensure the result matrix is written back to RDRAM
 }

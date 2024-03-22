@@ -17,7 +17,6 @@ void vec_init() {
 
   // Initialize the saved state
   void *state = UncachedAddr(rspq_overlay_get_state(&rsp_simple));
-  memset(state, 0, 0x400);
 
   // Register the overlay
   vec_id = rspq_overlay_register(&rsp_simple);
