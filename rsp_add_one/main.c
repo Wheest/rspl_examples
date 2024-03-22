@@ -16,10 +16,6 @@ enum {
 
 void vec_init() {
   rspq_init();
-
-  // Initialize the saved state
-  void *state = UncachedAddr(rspq_overlay_get_state(&rsp_simple));
-
   // Register the overlay
   vec_id = rspq_overlay_register(&rsp_simple);
 }
