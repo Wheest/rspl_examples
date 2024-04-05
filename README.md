@@ -13,6 +13,12 @@
   </p>
 </div>
 
+The following are some functional examples of the RSPL language for the N64's RSP co-processor.
+A web app with docs and transpiler for RSPL is [available here](https://mbeboek.gitlab.io/rspl/), which explains more about it.
+Big props to Max Bebök (HailToDodongo) for all their work on it.
+The language is great, because the alternative for writing accelerated RSP code on the N64 is raw MIPS assembly, which is time consuming to write.
+
+I made this repository because there were not a lot of small self-contained examples for the RSPL language, and I was developing accelerated kernels for my [DNN64 project](https://gibsonic.org/blog/2024/03/12/dnn64_p1).
 
 ## Add One
 
@@ -28,6 +34,8 @@ vec += vec.yywwYYWW;
 vec += vec.zzzzZZZZ;
 vec += vec.X;
 ```
+
+Checkout [my Twitter thread](https://twitter.com/PerryGibson_/status/1776239662136185044) if you want to understand why this works.
 
 ## int16 8x8 matmul
 
@@ -52,6 +60,10 @@ It runs computations in a partitioned fashion, as you can see in this diagram wh
 Partitioning is necessary because the N64 has a limited amount of memory, and partition 6 is the same size as the other 5, but with extra zeros at the end which are discarded in the final output.
 The maximum height of the input and output partitions are determined by `conv2d_rspl_gen.py`, which iteratively guestimates how much memory the RSP would have left.
 
+The script (`conv2d_rspl_gen.py`) prints what the suggested partition sizes are, and you should edit them in the `main.c` file as appropriate.
+You need to manually copy the generated RSPL file to the [RSPL webapp](https://mbeboek.gitlab.io/rspl/), then copy the generated assembly into the `rsp_simple.S` file.
+It is not until version 3 of the script (adding support for deeper depthwise convolutions) that I add automatic compilation.
+
 ## Depthwise conv2d deep (v3)
 
 This example adds support for deeper depthwise convolution, i.e., `in_c >= 8`.
@@ -67,3 +79,10 @@ An example of this is given below, where we compute the red, green, and blue par
 
 The RSPL code generation script (`conv2d_rspl_gen.py`) has been upgraded (I'm not backporting lol), and now calls the RSPL compiler itself, rather than generating an RSPL file that you need to [copy into the web app manually](https://mbeboek.gitlab.io/rspl/).
 See [the RSPL GitLab](https://gitlab.com/mbeboek/rspl) for instructions for building, and be sure to replace the path to the CLI in the code generation script.
+
+## Depthwise conv2d stride (v4)
+
+This example extends v3 to support strides for depthwise convolution.
+When using a stride greater than 1, the average speedups go from ~8.4x to ~4.4x, since there is now less data reuse.
+
+The RSPL code generation script (`conv2d_rspl_gen.py`) has been upgraded, and now also better calculates the state memory available and being used by our kernel, so that it suggests larger partition sizes.
