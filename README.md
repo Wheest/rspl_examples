@@ -18,6 +18,17 @@
 
 The simplest example, which shows how we can use DMA to copy in an array of values and increment all of them by one.
 
+## Reduction
+
+Shows how we can do a vector reduction (i.e., the sum of a vector register).
+There isn't a native instruction for this, so we need to use a trick in three instructions:
+
+``` javascript
+vec += vec.yywwYYWW;
+vec += vec.zzzzZZZZ;
+vec += vec.X;
+```
+
 ## int16 8x8 matmul
 
 This example does matmul (`C = A * B`) with two int16 8x8 matrices.

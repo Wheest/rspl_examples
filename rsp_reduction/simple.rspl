@@ -1,0 +1,35 @@
+include "rsp_queue.inc"
+include "rdpq_macros.h"
+
+#define SIZE 1
+
+state
+{
+  vec16 INPUT[SIZE];
+}
+
+/**
+ * Transfers matrix from RDRAM to RSP DMEM.
+ * and does a reduction
+ * @param addressMatC RDRAM address of the first matrix
+ */
+command<0> Reduction(u32 addressMatC)
+{
+  addressMatC &= 0xFFFFFF;
+
+  // Perform DMA for input
+  dma_in(INPUT, addressMatC);
+
+  // Load value into register
+  vec16 psum = load(INPUT, 0x00);
+
+  // Use swizzle syntax to get sum
+  // first value is the sum, rest are junk
+  psum += psum.yywwYYWW;
+  psum += psum.zzzzZZZZ;
+  psum += psum.X;
+  store(psum, INPUT, 0x00);
+
+ // Perform DMA for Matrix C
+  dma_out(INPUT, addressMatC);
+}
