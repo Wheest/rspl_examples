@@ -1,0 +1,111 @@
+
+include "rsp_queue.inc"
+include "rdpq_macros.h"
+
+#define IN_SIZE {{in_size}} // {{input_slice_h}}x({{in_w}}+2*{{padding}}) (x8)
+#define W_SIZE {{w_size}} // 3x3 (x8)
+#define OSIZE {{osize}} // {{oh}}x{{ow}} (x8)
+
+state
+{
+  vec16 MAT_RES[OSIZE];
+  vec16 MAT_IN[IN_SIZE];
+  vec16 MAT_W[W_SIZE];
+}
+
+command<0> DMAInWeights(u32 addressMatW)
+{
+  addressMatW &= 0xFFFFFF;
+  dma_in_async(MAT_W, addressMatW);
+}
+
+command<1> DMAInInputs(u32 addressMatInput)
+{
+  addressMatInput &= 0xFFFFFF;
+  dma_in_async(MAT_IN, addressMatInput);
+}
+
+
+/**
+ * 3x3 Depthwise Convolution, in channel = 8, out channel = 8
+ * For slices of convolution (of height slice {{input_slice_h}})
+ * stride = 1, padding = {{padding}}, height = {{in_h}}, width = {{in_w}}, kernel = 3x3
+ * output height = {{oh}}, output width = {{ow}}
+ * Data layout: channels last
+ */
+command<2> DepthConv(u32 addressMatOut)
+{
+  addressMatOut &= 0xFFFFFF;
+
+  // VU contains 32 128-bit SIMD registers
+  vec16 Wslice00 = load(MAT_W, 0x00);
+  vec16 Wslice01 = load(MAT_W, 0x10);
+  vec16 Wslice02 = load(MAT_W, 0x20);
+  vec16 Wslice10 = load(MAT_W, 0x30);
+  vec16 Wslice11 = load(MAT_W, 0x40);
+  vec16 Wslice12 = load(MAT_W, 0x50);
+  vec16 Wslice20 = load(MAT_W, 0x60);
+  vec16 Wslice21 = load(MAT_W, 0x70);
+  vec16 Wslice22 = load(MAT_W, 0x80);
+
+  // DMA result out
+  u32 xpos_base = MAT_IN;
+  u32 out_pos = MAT_RES;
+
+  u32 iters_h = 0;
+
+  // Wait for input slice to be loaded
+  dma_await();
+
+  // Iterates over the height of the input matrix
+  loop {
+    u32 iters_w = 0;
+    // Iterates over the width of the input matrix
+    loop {
+      // Each iteration of this loop calculate a single 3x3
+      // sliding window (across all 8 channels)
+      u32 xpos = xpos_base;
+      vec16 Xslice = load(xpos);
+      vec16 yslice = Xslice * Wslice00;
+
+      Xslice = load(xpos, 0x10);
+      yslice = Xslice +* Wslice01;
+
+      Xslice = load(xpos, 0x20);
+      yslice = Xslice +* Wslice02;
+
+      xpos += {{w_slide_byte_offset}}; // ({{in_w}}+2*{{padding}})*8*2 compile time constants would be great here
+      Xslice = load(xpos);
+      yslice = Xslice +* Wslice10;
+
+      Xslice = load(xpos, 0x10);
+      yslice = Xslice +* Wslice11;
+
+      Xslice = load(xpos, 0x20);
+      yslice = Xslice +* Wslice12;
+
+      xpos += {{w_slide_byte_offset}}; // ({{in_w}}+2*{{padding}})*8*2;
+      Xslice = load(xpos);
+      yslice = Xslice +* Wslice20;
+
+      Xslice = load(xpos, 0x10);
+      yslice = Xslice +* Wslice21;
+
+      Xslice = load(xpos, 0x20);
+      yslice = Xslice +* Wslice22;
+
+      store(yslice, out_pos); // we could just DMA this back at this point
+      // dma_out_async(out_pos, curr_rdram_out_pos, 16);
+
+      // increment
+      xpos_base += 16; // 8*2 8 channels * 1 position * 2 bytes
+      out_pos += 16; // 8*2
+      iters_w += 1;
+    } while (iters_w < {{ow}})
+
+      xpos_base += {{h_slice_byte_offset}}; // {{kdim_w}}*8*2 (-16)
+    iters_h += 1;
+  } while (iters_h < {{max_h_iters}})
+
+  dma_out(MAT_RES, addressMatOut);
+}
