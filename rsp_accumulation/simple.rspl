@@ -1,0 +1,38 @@
+include "rsp_queue.inc"
+include "rdpq_macros.h"
+
+#define MATRIX_SIZE 1
+
+
+state
+{
+  vec16 A[MATRIX_SIZE];
+  vec16 B[MATRIX_SIZE];
+  vec32 RET[MATRIX_SIZE];
+}
+
+/**
+ * Multiplies two int16 vectors elemwise
+ * Should accumulate and return on int32
+ * @param addressMatC RDRAM address of the first matrix
+ */
+command<0> MatCopyIn(u32 addressRet, u32 addressMatA, u32 addressMatB)
+{
+  addressRet &= 0xFFFFFF;
+  addressMatA &= 0xFFFFFF;
+  addressMatB &= 0xFFFFFF;
+
+  // Perform DMA for Matrix A
+  dma_in(A, addressMatA);
+
+  // Perform DMA for Matrix B
+  dma_in(B, addressMatB);
+
+  vec16 a = load(A, 0x00);
+  vec16 b = load(B, 0x00);
+  vec32 ret = a * b;
+  store(ret, RET, 0x00);
+
+  // Perform DMA for Matrix C
+  dma_out(RET, addressRet);
+}
