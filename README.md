@@ -37,18 +37,37 @@ vec += vec.X;
 
 Checkout [my Twitter thread](https://twitter.com/PerryGibson_/status/1776239662136185044) if you want to understand why this works.
 
+## int32 accumulation
+
+When we do lots of multiplications (and accumulations), there's a risk that we can overflow (e.g., multiply two 16 bit values, and you could require 32 bits).
+On the RSP, we can handle this, which is what this example shows.
+
+However, a word of warning.
+This elementwise multiplication of two int16 vector registers (with 8 values in each) stores the result in two vector registers, since we need 256 bits for 8 32-bit values.
+But the format is not what we need, it stores the upper 2 bytes of each element first, and then the lower 2 bytes.
+
+This means that to get our values, we need move the bytes around.
+I chose to do this on the CPU-side (using the `reconstruct_vector` function), as it makes more sense for my usecase.
+However, there are ways of doing it on the RSP-side.  Checkout the [N64brew Discord](https://n64brew.dev/wiki/Main_Page) for more information.
+
+
 ## int16 8x8 matmul
 
 This example does matmul (`C = A * B`) with two int16 8x8 matrices.
-It assumes that overflow is not a problem.
+It assumes that overflow is not a problem (otherwise you would need to add int32 accumulation like the above example).
 We calculate in row-major, with the B matrix transposed to take advantage of the vector instructions.
 
-## Depthwise conv2d (v1)
+## Depthwise convolution
 
-Implements channels last depthwise convolution, for int16.
+The following are examples of running the [depthwise convolution operation](https://paperswithcode.com/method/depthwise-convolution), at increasing levels of complexity.
+E.g., the first version assumes a fixed data size, that can fit on the RSP completely; whereas v2 allows larger datasizes, but fixed strides, etc.
+
+### Depthwise conv2d (v1)
+
+Implements channels last depthwise convolution, for int16, accumulating onto int16 (so assumes no overflow).
 The inputs are of shape `(4, 4, 8)`, the kernel size is `3x3`, the strides are 1, and the padding is 0.
 
-## Depthwise conv2d large (v2)
+### Depthwise conv2d large (v2)
 
 This example adds support for depthwise convolutions that are too large along the height and width dimensions.
 A Python Jinja script (`conv2d_rspl_gen.py`) is used to create the RSPL code for your given input size.
@@ -64,7 +83,7 @@ The script (`conv2d_rspl_gen.py`) prints what the suggested partition sizes are,
 You need to manually copy the generated RSPL file to the [RSPL webapp](https://mbeboek.gitlab.io/rspl/), then copy the generated assembly into the `rsp_simple.S` file.
 It is not until version 3 of the script (adding support for deeper depthwise convolutions) that I add automatic compilation.
 
-## Depthwise conv2d deep (v3)
+### Depthwise conv2d deep (v3)
 
 This example adds support for deeper depthwise convolution, i.e., `in_c >= 8`.
 It still needs to be a multiple of 8, but in my experience it usually is anyway.
@@ -80,7 +99,7 @@ An example of this is given below, where we compute the red, green, and blue par
 The RSPL code generation script (`conv2d_rspl_gen.py`) has been upgraded (I'm not backporting lol), and now calls the RSPL compiler itself, rather than generating an RSPL file that you need to [copy into the web app manually](https://mbeboek.gitlab.io/rspl/).
 See [the RSPL GitLab](https://gitlab.com/mbeboek/rspl) for instructions for building, and be sure to replace the path to the CLI in the code generation script.
 
-## Depthwise conv2d stride (v4)
+### Depthwise conv2d stride (v4)
 
 This example extends v3 to support strides for depthwise convolution.
 When using a stride greater than 1, the average speedups go from ~8.4x to ~4.4x, since there is now less data reuse.

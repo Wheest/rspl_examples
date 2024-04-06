@@ -94,37 +94,37 @@
 .text
 
 MatCopyIn:
+  ori $s4, $zero, %lo(A)
   lui $at, 0xFF
   ori $at, $at, 0xFFFF
   and $a0, $a0, $at
-  lui $at, 0xFF
   addiu $t2, $zero, 12
+  lui $at, 0xFF
   ori $at, $at, 0xFFFF
-  ori $t0, $zero, 15
   and $a1, $a1, $at
   lui $at, 0xFF
   ori $at, $at, 0xFFFF
-  and $a2, $a2, $at
+  ori $t0, $zero, 15
   or $s0, $zero, $a1
   jal DMAExec ## Args: $t0, $t1, $s0, $s4, $t2
-  ori $s4, $zero, %lo(A)
-  addiu $t2, $zero, 12
-  or $s0, $zero, $a2
+  and $a2, $a2, $at
   ori $t0, $zero, 15
-  jal DMAExec ## Args: $t0, $t1, $s0, $s4, $t2
   ori $s4, $zero, %lo(B)
+  or $s0, $zero, $a2
+  jal DMAExec ## Args: $t0, $t1, $s0, $s4, $t2
+  addiu $t2, $zero, 12
   ori $at, $zero, %lo(A)
   lqv $v28, 0, 0, $at
   ori $at, $zero, %lo(B)
   lqv $v27, 0, 0, $at
-  ori $s4, $zero, %lo(RET)
   ori $at, $zero, %lo(RET)
-  vmudh $v26, $v28, $v27.v
   ori $t0, $zero, 31
-  vsar $v26, COP2_ACC_MD
-  or $s0, $zero, $a0
   addiu $t2, $zero, -32756
+  vmudh $v26, $v28, $v27.v
+  or $s0, $zero, $a0
+  vsar $v26, COP2_ACC_MD
   vsar $v25, COP2_ACC_HI
+  ori $s4, $zero, %lo(RET)
   sqv $v26, 0, 16, $at
   jal DMAExec ## Args: $t0, $t1, $s0, $s4, $t2
   sqv $v25, 0, 0, $at
