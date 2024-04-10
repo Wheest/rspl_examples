@@ -35,7 +35,7 @@ vec += vec.zzzzZZZZ;
 vec += vec.X;
 ```
 
-Checkout [my Twitter thread](https://twitter.com/PerryGibson_/status/1776239662136185044) if you want to understand why this works.
+Check out [my Twitter thread](https://twitter.com/PerryGibson_/status/1776239662136185044) if you want to understand why this works.
 
 ## int32 accumulation
 
@@ -48,7 +48,7 @@ But the format is not what we need, it stores the upper 2 bytes of each element 
 
 This means that to get our values, we need move the bytes around.
 I chose to do this on the CPU-side (using the `reconstruct_vector` function), as it makes more sense for my usecase.
-However, there are ways of doing it on the RSP-side.  Checkout the [N64brew Discord](https://n64brew.dev/wiki/Main_Page) for more information.
+However, there are ways of doing it on the RSP-side.  Check out the [N64brew Discord](https://n64brew.dev/wiki/Main_Page) for more information.
 
 
 ## int16 8x8 matmul

@@ -1,0 +1,32 @@
+include "rsp_queue.inc"
+include "rdpq_macros.h"
+
+state
+{
+  vec16 A[1]; // 2 8-bit vectors
+  vec16 RET[2];
+}
+
+/**
+ * Takes a length 16 8-bit vector, and returns a 16-bit vector incremented by 300
+ */
+command<0> MatCopyIn(u32 addressRet, u32 addressMatA)
+{
+  addressRet &= 0xFFFFFF;
+  addressMatA &= 0xFFFFFF;
+
+  // Perform DMA for Matrix A
+  dma_in(A, addressMatA);
+
+  v16 cst = 300;
+  vec16 a = load_vec_s8(A, 0x00);
+  a += cst.xxxxxxxx;
+  store(a, RET, 0x00);
+
+  a = load_vec_s8(A, 0x08);
+  a += cst.xxxxxxxx;
+  store(a, RET, 0x08);
+
+  // Perform DMA for Matrix C
+  dma_out(RET, addressRet);
+}
