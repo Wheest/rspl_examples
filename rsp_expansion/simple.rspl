@@ -15,18 +15,19 @@ command<0> MatCopyIn(u32 addressRet, u32 addressMatA)
   addressRet &= 0xFFFFFF;
   addressMatA &= 0xFFFFFF;
 
-  // Perform DMA for Matrix A
   dma_in(A, addressMatA);
 
-  v16 cst = 300;
+  vec16 cst;
+  cst.x = 300;
   vec16 a = load_vec_s8(A, 0x00);
-  a += cst.xxxxxxxx;
+  a = a >> 8;
+  a += cst.x;
   store(a, RET, 0x00);
 
   a = load_vec_s8(A, 0x08);
-  a += cst.xxxxxxxx;
-  store(a, RET, 0x08);
+  a = a >> 8;
+  a += cst.x;
+  store(a, RET, 0x10);
 
-  // Perform DMA for Matrix C
   dma_out(RET, addressRet);
 }

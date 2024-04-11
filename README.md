@@ -50,6 +50,11 @@ This means that to get our values, we need move the bytes around.
 I chose to do this on the CPU-side (using the `reconstruct_vector` function), as it makes more sense for my usecase.
 However, there are ways of doing it on the RSP-side.  Check out the [N64brew Discord](https://n64brew.dev/wiki/Main_Page) for more information.
 
+## int8 expansion
+
+The RSP works with lane sizes of 16-bits, but there may be cases where your data is int8.
+We can take advantage of the reduced data size with fewer DMA transfers, and then use the RSP to cast the data to int16.
+Note that loading int8 to int16 puts the data on the upper byte, so we need to have an extra instruction to right shift to the lower ones.
 
 ## int16 8x8 matmul
 

@@ -76,7 +76,7 @@
 
 .data
   RSPQ_BeginOverlayHeader
-    RSPQ_DefineCommand Increm, 8
+    RSPQ_DefineCommand MatCopyIn, 8
   RSPQ_EndOverlayHeader
 
   RSPQ_BeginSavedState
@@ -90,35 +90,37 @@
 
 .text
 
-Increm:
-  lui $at, 0xFF
-  ori $at, $at, 0xFFFF
-  and $a0, $a0, $at
+MatCopyIn:
   lui $at, 0xFF
   ori $t0, $zero, 15
   ori $at, $at, 0xFFFF
+  and $a0, $a0, $at
+  lui $at, 0xFF
+  ori $at, $at, 0xFFFF
+  addiu $t2, $zero, 12
   and $a1, $a1, $at
   ori $s4, $zero, %lo(A)
-  addiu $t2, $zero, 12
   jal DMAExec ## Args: $t0, $t1, $s0, $s4, $t2
   or $s0, $zero, $a1
   addiu $at, $zero, 300
   mtc2 $at, $v28.e0
   ori $at, $zero, %lo(A)
   lpv $v27, 0, 0, $at
-  addiu $t2, $zero, -32756
-  ori $t0, $zero, 31
-  vaddc $v27, $v27, $v28.e0
+  vmudl $v27, $v27, $v31.e7
   or $s0, $zero, $a0
+  vaddc $v27, $v27, $v28.e0
+  addiu $t2, $zero, -32756
   ori $s4, $zero, %lo(RET)
   ori $at, $zero, %lo(RET)
   sqv $v27, 0, 0, $at
   ori $at, $zero, %lo(A)
   lpv $v27, 0, 8, $at
   ori $at, $zero, %lo(RET)
+  vmudl $v27, $v27, $v31.e7
+  ori $t0, $zero, 31
   vaddc $v27, $v27, $v28.e0
   jal DMAExec ## Args: $t0, $t1, $s0, $s4, $t2
-  sqv $v27, 0, 8, $at
+  sqv $v27, 0, 16, $at
   j RSPQ_Loop
   nop
 

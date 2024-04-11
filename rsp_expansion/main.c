@@ -14,13 +14,6 @@ enum {
   Shift = 0x0,
 };
 
-void reconstruct_vector(int32_t *src, int32_t *dst, size_t size) {
-  uint16_t *out = (uint16_t *)src;
-  for (int i = 0; i < 8; i++) {
-    dst[i] = ((uint32_t)out[i] << 16) | out[i + 8];
-  }
-}
-
 void vec_init() {
   rspq_init();
   // Register the overlay
@@ -33,22 +26,6 @@ static inline void RSPShift(int16_t *dest, int8_t *a) {
   rspq_write(vec_id, Shift, PhysicalAddr(dest), PhysicalAddr(a));
 }
 
-void printi16ArrayAsHex(int16_t *array, size_t length) {
-  for (size_t i = 0; i < length; ++i) {
-    // Use PRIx16 to correctly format int16_t value as hex
-    printf("%04" PRIx16 " ", (uint16_t)array[i]);
-  }
-  printf("\n");
-}
-
-void printi32ArrayAsHex(int32_t *array, size_t length) {
-  for (size_t i = 0; i < length; ++i) {
-    // Correctly handling int32_t with casting and using PRIx32 macro
-    printf("%08" PRIx32 " ", (uint32_t)array[i]);
-  }
-  printf("\n");
-}
-
 int main() {
   // Initialize systems
   console_init();
@@ -58,14 +35,18 @@ int main() {
 
   vec_init();
   printf("Init'd RSP overlay\n");
+  printf("This program adds 300 to the values, which are int8.\nThe RSP will "
+         "shift the values to int16\n");
 
   // allocate and copy over data to the RSP
   int16_t *output_array = malloc_uncached_aligned(8, sizeof(int16_t) * 16);
   int8_t *a = malloc_uncached_aligned(8, sizeof(int8_t) * 16);
 
   printf("Data before RSP\n");
-  for (int i = 0; i < 8; i++)
+  for (int i = 0; i < 16; i++) {
     a[i] = 50 + i;
+    printf("%d ", a[i]);
+  }
 
   printf("\nTransfering data to RSP...\n");
   RSPShift(output_array, a);
@@ -73,33 +54,18 @@ int main() {
   printf("Done\n");
 
   printf("Data after RSP\n");
-  for (int i = 0; i < 8; i++) {
+  for (int i = 0; i < 16; i++) {
     printf("%d ", output_array[i]);
   }
 
-  /* int32_t *output_array2 = malloc_uncached_aligned(8, sizeof(int32_t) * 8);
-   */
-
-  /* // Reconstruct the vector, since right now it's in a format where */
-  /* // the first 4 elements are the upper 2 bytes of the 8 elements */
-  /* // and the last 4 elements are the lower 2 bytes of the 8 elements */
-  /* reconstruct_vector(output_array, output_array2, 8); */
-
-  /* printf("\nReconstructed\n"); */
-  /* for (int i = 0; i < 8; i++) { */
-  /*   printf("%ld ", output_array2[i]); */
-  /* } */
-
-  /* printf("\nShould be:\n"); */
-  /* bool correct = true; */
-  /* for (int i = 0; i < 8; i++) { */
-  /*   printf("%ld ", (int32_t)a[i] * b[i]); */
-  /*   if (output_array2[i] != (int32_t)a[i] * b[i]) { */
-  /*     correct = false; */
-  /*   } */
-  /* } */
-  /* printf("\n"); */
-  /* printf("Correct: %d\n", correct); */
+  char *correct = "aye";
+  for (int i = 0; i < 8; i++) {
+    if (output_array[i] != (int32_t)a[i] + 300) {
+      correct = "naw";
+    }
+  }
+  printf("\n");
+  printf("Correct: %s\n", correct);
 
   // Clean up
   vec_close();
