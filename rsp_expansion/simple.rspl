@@ -12,8 +12,7 @@ state
  */
 command<0> MatCopyIn(u32 addressRet, u32 addressMatA)
 {
-  addressRet &= 0xFFFFFF;
-  addressMatA &= 0xFFFFFF;
+  addressRet &= 0xFFFFFF; // filter out first byte
 
   dma_in(A, addressMatA);
 

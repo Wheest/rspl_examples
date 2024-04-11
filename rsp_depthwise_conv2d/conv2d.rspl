@@ -21,9 +21,7 @@ state
  */
 command<0> DepthConv(u32 addressMatOut, u32 addressMatL, u32 addressMatR)
 {
-  addressMatL &= 0xFFFFFF;
-  addressMatR &= 0xFFFFFF;
-  addressMatOut &= 0xFFFFFF;
+  addressMatOut &= 0xFFFFFF;  // filter out first byte
 
   // DMA matrices in
   dma_in(MAT_IN, addressMatL);
