@@ -99,7 +99,7 @@ It computes all the outputs at a given depth first, then loads the next set of w
 
 An example of this is given below, where we compute the red, green, and blue partitions first, before moving back to the next set of 3 partitions.
 
-![Example of depth partitions](./rsp_depthwise_conv_deep/deep_partitions.png)
+![Example of depth partitions](./rsp_depthwise_conv2d_deep/deep_partitions.png)
 
 The RSPL code generation script (`conv2d_rspl_gen.py`) has been upgraded (I'm not backporting lol), and now calls the RSPL compiler itself, rather than generating an RSPL file that you need to [copy into the web app manually](https://mbeboek.gitlab.io/rspl/).
 See [the RSPL GitLab](https://gitlab.com/mbeboek/rspl) for instructions for building, and be sure to replace the path to the CLI in the code generation script.
