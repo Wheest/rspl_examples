@@ -1,0 +1,37 @@
+include "rsp_queue.inc"
+include "rdpq_macros.h"
+
+
+state
+{
+  u32 a_s;
+  u32 b_s;
+  u32 c_s;
+  u32 d_s;
+  u32 out_s;
+}
+
+command<0> SetArgs(u32 a, u32 b, u32 c, u32 d)
+{
+  store(a, a_s);
+  store(b, b_s);
+  store(c, c_s);
+  store(d, d_s);
+}
+
+command<1> SumArgs(u32 addressOut)
+{
+  addressOut &= 0xFFFFFF;
+
+  u32 a = load(a_s);
+  u32 b = load(b_s);
+  u32 c = load(c_s);
+  u32 d = load(d_s);
+  u32 out = a;
+  out += b;
+  out += c;
+  out += d;
+  store(out, out_s);
+
+  dma_out(out_s, addressOut);
+}
