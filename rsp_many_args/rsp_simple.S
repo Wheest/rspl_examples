@@ -76,7 +76,7 @@
 
 .data
   RSPQ_BeginOverlayHeader
-    RSPQ_DefineCommand SetArgs, 16
+    RSPQ_DefineCommand SetArgs, 20
     RSPQ_DefineCommand SumArgs, 4
   RSPQ_EndOverlayHeader
 
@@ -91,6 +91,8 @@
     .align 2
     d_s: .ds.b 4
     .align 2
+    e_s: .ds.b 4
+    .align 4
     out_s: .ds.b 4
     STATE_MEM_END:
   RSPQ_EndSavedState
@@ -98,29 +100,39 @@
 .text
 
 SetArgs:
-  sw $a1, %lo(b_s)($zero)
+  lui $at, 0xFF
+  lw $s0, %lo(RSPQ_DMEM_BUFFER) - 4($gp)
+  ori $at, $at, 0xFFFF
+  and $a0, $a0, $at
   sw $a2, %lo(c_s)($zero)
   sw $a0, %lo(a_s)($zero)
-  j RSPQ_Loop
+  sw $a1, %lo(b_s)($zero)
   sw $a3, %lo(d_s)($zero)
+  j RSPQ_Loop
+  sw $s0, %lo(e_s)($zero)
 SumArgs:
   lui $at, 0xFF
   ori $at, $at, 0xFFFF
-  lw $s4, %lo(d_s + 0)
-  lw $s5, %lo(c_s + 0)
-  lw $s7, %lo(a_s + 0)
   and $a0, $a0, $at
+  lw $s7, %lo(a_s + 0)
   lw $s6, %lo(b_s + 0)
-  ori $t0, $zero, 3
+  lw $s5, %lo(c_s + 0)
+  lw $s4, %lo(d_s + 0)
+  lw $s3, %lo(e_s + 0)
+  or $s2, $zero, $s7
+  addu $s2, $s2, $s6
+  addu $s2, $s2, $s5
+  addu $s2, $s2, $s4
+  addu $s2, $s2, $s3
+  sw $s2, %lo(out_s)($zero)
   or $s0, $zero, $a0
-  or $s3, $zero, $s7
-  addiu $t2, $zero, -32756
-  addu $s3, $s3, $s6
-  addu $s3, $s3, $s5
-  addu $s3, $s3, $s4
+  ori $t0, $zero, 3
   ori $s4, $zero, %lo(out_s)
-  j DMAExec ## Args: $t0, $t1, $s0, $s4, $t2
-  sw $s3, %lo(out_s)($zero)
+  addiu $t2, $zero, -32756
+  jal DMAExec ## Args: $t0, $t1, $s0, $s4, $t2
+  nop
+  j RSPQ_Loop
+  nop
 
 #define zero $0
 #define v0 $2

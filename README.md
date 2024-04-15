@@ -37,6 +37,27 @@ vec += vec.X;
 
 Check out [my Twitter thread](https://twitter.com/PerryGibson_/status/1776239662136185044) if you want to understand why this works.
 
+## Many args
+
+The RSP has 4 argument registers (`$a0`-`$a3`), which can be passed to commands:
+
+``` javascript
+command<0> Example(u32 a, u32 b, u32 c, u32 d)
+```
+
+a is implictily given the `$a0` register, and so on.
+If you require more arguments, you need to set them explicitly, e.g.:
+
+``` javascript
+command<0> SetArgs(u32 a, u32 b, u32 c, u32 d, u32<$s0> e)
+```
+
+Where we store the `e` variable in the `$s0` register.
+
+If you are calling a function many times, and have lots of arguments which remain constant between invocations (but cannot be hard-coded ), you may want to store the arguments in the state.
+
+This example shows this behaviour.
+
 ## int32 accumulation
 
 When we do lots of multiplications (and accumulations), there's a risk that we can overflow (e.g., multiply two 16 bit values, and you could require 32 bits).

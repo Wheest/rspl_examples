@@ -8,15 +8,19 @@ state
   u32 b_s;
   u32 c_s;
   u32 d_s;
+  u32 e_s;
+  alignas(16)
   u32 out_s;
 }
 
-command<0> SetArgs(u32 a, u32 b, u32 c, u32 d)
+command<0> SetArgs(u32 a, u32 b, u32 c, u32 d, u32<$s0> e)
 {
+  a &= 0xFFFFFF;
   store(a, a_s);
   store(b, b_s);
   store(c, c_s);
   store(d, d_s);
+  store(e, e_s); // extra args need a target register
 }
 
 command<1> SumArgs(u32 addressOut)
@@ -27,10 +31,12 @@ command<1> SumArgs(u32 addressOut)
   u32 b = load(b_s);
   u32 c = load(c_s);
   u32 d = load(d_s);
+  u32 e = load(e_s);
   u32 out = a;
   out += b;
   out += c;
   out += d;
+  out += e;
   store(out, out_s);
 
   dma_out(out_s, addressOut);
