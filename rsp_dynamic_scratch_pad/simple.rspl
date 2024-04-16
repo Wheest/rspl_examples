@@ -1,0 +1,35 @@
+include "rsp_queue.inc"
+include "rdpq_macros.h"
+
+#define DATA_SIZE 10
+
+
+state
+{
+  vec16 DATA[DATA_SIZE];
+  u32 arr2;
+}
+
+command<0> Concat(
+  u32 addressA, u32 addressB, u32 sizeA, u32 sizeB, u32<$s0> addressRet
+)
+{
+  addressA &= 0xFFFFFF;
+
+  // Perform DMA for array A
+  u32<$t0> size = sizeA;
+  dma_in(DATA, addressA, size);
+
+  // Set the address of array B (offset from sizeA)
+  u32<$s4> addrArrB = DATA;
+  u32 offset = sizeA * 16;
+  addrArrB += offset;
+  store(addrArrB, arr2); // store in case we use it later
+
+  // Perform DMA for array B
+  size = sizeB;
+  dma_in(addrArrB, addressB, size);
+
+  // Return the concat array
+  dma_out(DATA, addressRet);
+}
