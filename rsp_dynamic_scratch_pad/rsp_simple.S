@@ -92,29 +92,29 @@
 .text
 
 Concat:
-  lw $s0, %lo(RSPQ_DMEM_BUFFER) - 4($gp)
   lui $at, 0xFF
   ori $at, $at, 0xFFFF
   and $a0, $a0, $at
-  or $t0, $zero, $a2
+  or $t0, $zero, $a3
+  or $s0, $zero, $a0
   addiu $t0, $t0, -1
   ori $s4, $zero, %lo(DATA)
   addiu $t2, $zero, 12
   jal DMAExec ## Args: $t0, $t1, $s0, $s4, $t2
-  or $s0, $zero, $a0
+  lw $s1, %lo(RSPQ_DMEM_BUFFER) - 4($gp)
   ori $s4, $zero, %lo(DATA)
-  sll $s7, $a2, 4
-  addu $s4, $s4, $s7
-  or $t0, $zero, $a3
+  addu $s4, $s4, $a3
+  or $t0, $zero, $s1
   or $s0, $zero, $a1
   addiu $t0, $t0, -1
   addiu $t2, $zero, 12
   jal DMAExec ## Args: $t0, $t1, $s0, $s4, $t2
   sw $s4, %lo(arr2)($zero)
+  ori $t0, $zero, 159
   ori $s4, $zero, %lo(DATA)
   addiu $t2, $zero, -32756
   jal DMAExec ## Args: $t0, $t1, $s0, $s4, $t2
-  ori $t0, $zero, 159
+  or $s0, $zero, $a2
   j RSPQ_Loop
   nop
 

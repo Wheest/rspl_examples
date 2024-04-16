@@ -10,8 +10,15 @@ state
   u32 arr2;
 }
 
+/* Concatenates two arrays into a single array
+ * addressA: Address of the first array
+ * addressB: Address of the second array
+ * addressRet: Address of the concatenated array
+ * sizeA: Size of the first array (in bytes)
+ * sizeB: Size of the second array (in bytes)
+ */
 command<0> Concat(
-  u32 addressA, u32 addressB, u32 sizeA, u32 sizeB, u32<$s0> addressRet
+  u32 addressA, u32 addressB, u32 addressRet, u32 sizeA, u32<$s1> sizeB
 )
 {
   addressA &= 0xFFFFFF;
@@ -22,8 +29,7 @@ command<0> Concat(
 
   // Set the address of array B (offset from sizeA)
   u32<$s4> addrArrB = DATA;
-  u32 offset = sizeA * 16;
-  addrArrB += offset;
+  addrArrB += sizeA;
   store(addrArrB, arr2); // store in case we use it later
 
   // Perform DMA for array B
