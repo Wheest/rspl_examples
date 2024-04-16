@@ -83,6 +83,14 @@ This example does matmul (`C = A * B`) with two int16 8x8 matrices.
 It assumes that overflow is not a problem (otherwise you would need to add int32 accumulation like the above example).
 We calculate in row-major, with the B matrix transposed to take advantage of the vector instructions.
 
+## Dynamic scratchpad
+
+Although it can be useful to have explicit buffers for data (as seen in the matmul example with `MAT_L`, `MAT_R`, and `MAT_RES`), there may be situations where the size of your data is more dynamic (e.g., you have variable sizes of matrices).
+In this case, it might make sense to declare a unified data buffer, and then keep track of pointers to the start of each buffer within that buffer.
+This example shows this behaviour.
+
+Note that our extra argument is in `$s1` instead of `$s0` (which is what the extra arg example uses) because that register is used by DMA.
+
 ## Depthwise convolution
 
 The following are examples of running the [depthwise convolution operation](https://paperswithcode.com/method/depthwise-convolution), at increasing levels of complexity.
