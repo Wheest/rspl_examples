@@ -62,6 +62,7 @@ enum {
   DMAWeights = 0x0,
   DMAInputs = 0x1,
   DepthConv = 0x2,
+  SetArgs = 0x3,
 };
 
 void vec_init() {
@@ -129,6 +130,7 @@ RSPDepthConvTiledPadded(int16_t *dest, int16_t *input_data, int16_t *weights,
   /* printf("Weights reshape\n"); */
   /* printIntArrayHWC(weights, 3, 3, 8); */
 
+  const int dbytes = sizeof(int16_t);
   int16_t *input_pad_part = malloc_uncached_aligned(
       8, input_partition_height * (in_w + 2 * padding) * 8 * sizeof(int16_t));
   int16_t *output_pad_part = malloc_uncached_aligned(
@@ -139,6 +141,16 @@ RSPDepthConvTiledPadded(int16_t *dest, int16_t *input_data, int16_t *weights,
   const int w_part_size = k_h * k_w * 8 * sizeof(int16_t);
 
   const int overlap = k_h - stride;
+  const int w_stride_slice = 8 * sizeof(int16_t) * stride;
+  const int w_slide_byte_offset = 8 * sizeof(int16_t) * (in_w + 2 * padding);
+  const int h_slide_byte_offset =
+      (k_w * 8 * dbytes) - 16 +
+      (stride - 1) * 8 * (in_h + 2 * padding) * dbytes;
+  /* printf("w_slide_byte_offset: %d\n", w_slide_byte_offset); */
+
+  rspq_write(vec_id, SetArgs, output_partition_height, out_w, w_stride_slice,
+             w_slide_byte_offset, h_slide_byte_offset);
+
   for (int depth_slice = 0; depth_slice < in_c / 8; depth_slice++) {
     int slice_count = 0;
     int remaining_out_values = out_h * out_w * 8; // Remaining values to copy
@@ -167,8 +179,7 @@ RSPDepthConvTiledPadded(int16_t *dest, int16_t *input_data, int16_t *weights,
       rspq_wait();
       // Process the padded partition on the RSP
       rspq_write(vec_id, DepthConv, PhysicalAddr(output_pad_part),
-                 out_part_size * sizeof(int16_t), output_partition_height,
-                 out_w);
+                 out_part_size * sizeof(int16_t));
       // Generate next slice while the current one is being
       // processed
       if (start_h_next <= in_h) {

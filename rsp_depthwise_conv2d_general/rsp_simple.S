@@ -81,7 +81,8 @@
   RSPQ_BeginOverlayHeader
     RSPQ_DefineCommand DMAInWeights, 8
     RSPQ_DefineCommand DMAInInputs, 8
-    RSPQ_DefineCommand DepthConv, 16
+    RSPQ_DefineCommand DepthConv, 8
+    RSPQ_DefineCommand SetArgs, 20
   RSPQ_EndOverlayHeader
 
   RSPQ_BeginSavedState
@@ -91,94 +92,120 @@
     MAT_IN: .ds.b 2176
     .align 3
     MAT_W: .ds.b 144
+    .align 2
+    out_part_h_s: .ds.b 4
+    .align 2
+    out_w_s: .ds.b 4
+    .align 2
+    w_stride_slice_s: .ds.b 4
+    .align 2
+    w_slide_byte_offset_s: .ds.b 4
+    .align 2
+    h_slide_byte_offset_s: .ds.b 4
   RSPQ_EndSavedState
 
 .text
 
 DMAInWeights:
   lui $at, 0xFF
-  or $t0, $zero, $a1
-  or $t2, $zero, $zero
-  ori $s4, $zero, %lo(MAT_W)
   ori $at, $at, 0xFFFF
-  addiu $t0, $t0, -1
   and $a0, $a0, $at
+  or $t0, $zero, $a1
+  addiu $t0, $t0, -1
+  ori $s4, $zero, %lo(MAT_W)
+  or $t2, $zero, $zero
   jal DMAExec
   or $s0, $zero, $a0
   j RSPQ_Loop
   nop
 DMAInInputs:
-  or $t0, $zero, $a1
   lui $at, 0xFF
-  addiu $t0, $t0, -1
-  or $t2, $zero, $zero
-  ori $s4, $zero, %lo(MAT_IN)
   ori $at, $at, 0xFFFF
   and $a0, $a0, $at
+  or $t0, $zero, $a1
+  addiu $t0, $t0, -1
+  ori $s4, $zero, %lo(MAT_IN)
+  or $t2, $zero, $zero
   jal DMAExec
   or $s0, $zero, $a0
   j RSPQ_Loop
   nop
-DepthConv:
-  or $t0, $zero, $a1
+SetArgs:
+  lw $s0, %lo(RSPQ_DMEM_BUFFER) - 4($gp)
   lui $at, 0xFF
   ori $at, $at, 0xFFFF
   and $a0, $a0, $at
+  sw $a1, %lo(out_w_s)($zero)
+  sw $a2, %lo(w_stride_slice_s)($zero)
+  sw $a3, %lo(w_slide_byte_offset_s)($zero)
+  sw $s0, %lo(h_slide_byte_offset_s)($zero)
+  j RSPQ_Loop
+  sw $a0, %lo(out_part_h_s)($zero)
+DepthConv:
+  lui $at, 0xFF
+  ori $at, $at, 0xFFFF
+  and $a0, $a0, $at
+  lw $s7, %lo(out_w_s + 0)
+  lw $s6, %lo(out_part_h_s + 0)
+  lw $s5, %lo(w_stride_slice_s + 0)
+  lw $s4, %lo(w_slide_byte_offset_s + 0)
+  lw $s3, %lo(h_slide_byte_offset_s + 0)
   ori $at, $zero, %lo(MAT_W)
-  lqv $v25, 0, 48, $at
-  ori $s6, $zero, %lo(MAT_RES)
-  ori $s7, $zero, %lo(MAT_IN)
-  lqv $v21, 0, 112, $at
-  lqv $v26, 0, 32, $at
   lqv $v28, 0, 0, $at
-  lqv $v22, 0, 96, $at
-  or $s5, $zero, $zero
   lqv $v27, 0, 16, $at
-  lqv $v20, 0, 128, $at
-  lqv $v23, 0, 80, $at
-  jal DMAWaitIdle
+  lqv $v26, 0, 32, $at
+  lqv $v25, 0, 48, $at
   lqv $v24, 0, 64, $at
+  lqv $v23, 0, 80, $at
+  lqv $v22, 0, 96, $at
+  lqv $v21, 0, 112, $at
+  lqv $v20, 0, 128, $at
+  ori $s2, $zero, %lo(MAT_IN)
+  ori $s1, $zero, %lo(MAT_RES)
+  or $s0, $zero, $zero
+  jal DMAWaitIdle
+  or $t0, $zero, $a1
   LABEL_0001:
-  or $s4, $zero, $zero
+  or $fp, $zero, $zero
   LABEL_0003:
-  or $s3, $zero, $s7
-  lqv $v19, 0, 0, $s3
+  or $sp, $zero, $s2
+  lqv $v19, 0, 0, $sp
   vmudn $v18, $v19, $v28.v
-  lqv $v19, 0, 16, $s3
+  lqv $v19, 0, 16, $sp
   vmadn $v18, $v19, $v27.v
-  lqv $v19, 0, 32, $s3
-  addiu $s4, $s4, 1
-  addiu $s7, $s7, 16
-  addiu $s3, $s3, 544
+  lqv $v19, 0, 32, $sp
   vmadn $v18, $v19, $v26.v
-  lqv $v19, 0, 0, $s3
+  addu $sp, $sp, $s4
+  lqv $v19, 0, 0, $sp
   vmadn $v18, $v19, $v25.v
-  lqv $v19, 0, 16, $s3
+  lqv $v19, 0, 16, $sp
   vmadn $v18, $v19, $v24.v
-  lqv $v19, 0, 32, $s3
-  addiu $s3, $s3, 544
+  lqv $v19, 0, 32, $sp
   vmadn $v18, $v19, $v23.v
-  lqv $v19, 0, 0, $s3
+  addu $sp, $sp, $s4
+  lqv $v19, 0, 0, $sp
   vmadn $v18, $v19, $v22.v
-  lqv $v19, 0, 16, $s3
+  lqv $v19, 0, 16, $sp
   vmadn $v18, $v19, $v21.v
-  lqv $v19, 0, 32, $s3
+  lqv $v19, 0, 32, $sp
   vmadn $v18, $v19, $v20.v
-  sltu $at, $s4, $a3
-  sqv $v18, 0, 0, $s6
+  sqv $v18, 0, 0, $s1
+  addiu $s1, $s1, 16
+  addiu $fp, $fp, 1
+  sltu $at, $fp, $s7
   bne $at, $zero, LABEL_0003
-  addiu $s6, $s6, 16
+  addu $s2, $s2, $s5
   LABEL_0004:
-  addiu $s5, $s5, 1
-  sltu $at, $s5, $a2
+  addiu $s0, $s0, 1
+  sltu $at, $s0, $s6
   bne $at, $zero, LABEL_0001
-  addiu $s7, $s7, 32
+  addu $s2, $s2, $s3
   LABEL_0002:
-  or $s0, $zero, $a0
-  addiu $t2, $zero, -32756
-  ori $s4, $zero, %lo(MAT_RES)
-  jal DMAExec
   addiu $t0, $t0, -1
+  ori $s4, $zero, %lo(MAT_RES)
+  addiu $t2, $zero, -32756
+  jal DMAExec
+  or $s0, $zero, $a0
   j RSPQ_Loop
   nop
 
