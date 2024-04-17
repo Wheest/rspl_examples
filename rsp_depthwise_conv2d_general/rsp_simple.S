@@ -1,7 +1,5 @@
 ## Auto-generated file, transpiled with RSPL
-#define IN_SIZE 136
-#define W_SIZE 9
-#define OSIZE 64
+#define SCRATCH_SIZE 213
 #include <rsp_queue.inc>
 #include <rdpq_macros.h>
 
@@ -82,16 +80,16 @@
     RSPQ_DefineCommand DMAInWeights, 8
     RSPQ_DefineCommand DMAInInputs, 8
     RSPQ_DefineCommand DepthConv, 8
-    RSPQ_DefineCommand SetArgs, 20
+    RSPQ_DefineCommand SetArgs, 28
   RSPQ_EndOverlayHeader
 
   RSPQ_BeginSavedState
     .align 3
-    MAT_RES: .ds.b 1024
-    .align 3
-    MAT_IN: .ds.b 2176
-    .align 3
-    MAT_W: .ds.b 144
+    DATA: .ds.b 3408
+    .align 2
+    addrX: .ds.b 4
+    .align 2
+    addrOut: .ds.b 4
     .align 2
     out_part_h_s: .ds.b 4
     .align 2
@@ -107,105 +105,113 @@
 .text
 
 DMAInWeights:
-  lui $at, 0xFF
-  ori $at, $at, 0xFFFF
-  and $a0, $a0, $at
   or $t0, $zero, $a1
-  addiu $t0, $t0, -1
-  ori $s4, $zero, %lo(MAT_W)
-  or $t2, $zero, $zero
-  jal DMAExec
-  or $s0, $zero, $a0
-  j RSPQ_Loop
-  nop
-DMAInInputs:
   lui $at, 0xFF
+  ori $s4, $zero, %lo(DATA)
   ori $at, $at, 0xFFFF
-  and $a0, $a0, $at
-  or $t0, $zero, $a1
-  addiu $t0, $t0, -1
-  ori $s4, $zero, %lo(MAT_IN)
   or $t2, $zero, $zero
+  addiu $t0, $t0, -1
+  and $a0, $a0, $at
   jal DMAExec
   or $s0, $zero, $a0
   j RSPQ_Loop
   nop
 SetArgs:
-  lw $s0, %lo(RSPQ_DMEM_BUFFER) - 4($gp)
   lui $at, 0xFF
-  ori $at, $at, 0xFFFF
-  and $a0, $a0, $at
-  sw $a1, %lo(out_w_s)($zero)
-  sw $a2, %lo(w_stride_slice_s)($zero)
+  lw $s0, %lo(RSPQ_DMEM_BUFFER) - 12($gp)
+  lw $s1, %lo(RSPQ_DMEM_BUFFER) - 8($gp)
+  ori $s7, $zero, %lo(DATA)
+  lw $s2, %lo(RSPQ_DMEM_BUFFER) - 4($gp)
   sw $a3, %lo(w_slide_byte_offset_s)($zero)
+  ori $at, $at, 0xFFFF
+  addu $s7, $s7, $s1
+  sw $s7, %lo(addrX)($zero)
+  addu $s7, $s7, $s2
+  and $a0, $a0, $at
   sw $s0, %lo(h_slide_byte_offset_s)($zero)
+  sw $a2, %lo(w_stride_slice_s)($zero)
+  sw $s7, %lo(addrOut)($zero)
+  sw $a1, %lo(out_w_s)($zero)
   j RSPQ_Loop
   sw $a0, %lo(out_part_h_s)($zero)
+DMAInInputs:
+  lui $at, 0xFF
+  or $t0, $zero, $a1
+  addiu $t0, $t0, -1
+  lw $s4, %lo(addrX + 0)
+  ori $at, $at, 0xFFFF
+  or $t2, $zero, $zero
+  and $a0, $a0, $at
+  jal DMAExec
+  or $s0, $zero, $a0
+  j RSPQ_Loop
+  nop
 DepthConv:
   lui $at, 0xFF
+  lw $s3, %lo(w_stride_slice_s + 0)
   ori $at, $at, 0xFFFF
+  lw $s4, %lo(addrOut + 0)
   and $a0, $a0, $at
-  lw $s7, %lo(out_w_s + 0)
-  lw $s6, %lo(out_part_h_s + 0)
-  lw $s5, %lo(w_stride_slice_s + 0)
-  lw $s4, %lo(w_slide_byte_offset_s + 0)
-  lw $s3, %lo(h_slide_byte_offset_s + 0)
-  ori $at, $zero, %lo(MAT_W)
-  lqv $v28, 0, 0, $at
+  ori $at, $zero, %lo(DATA)
+  lw $s2, %lo(w_slide_byte_offset_s + 0)
+  lqv $v20, 0, 128, $at
+  or $fp, $zero, $s4
   lqv $v27, 0, 16, $at
-  lqv $v26, 0, 32, $at
+  lw $s5, %lo(out_part_h_s + 0)
+  or $t0, $zero, $a1
+  lw $s7, %lo(addrX + 0)
+  lw $s1, %lo(h_slide_byte_offset_s + 0)
+  lqv $v22, 0, 96, $at
+  lqv $v21, 0, 112, $at
   lqv $v25, 0, 48, $at
   lqv $v24, 0, 64, $at
   lqv $v23, 0, 80, $at
-  lqv $v22, 0, 96, $at
-  lqv $v21, 0, 112, $at
-  lqv $v20, 0, 128, $at
-  ori $s2, $zero, %lo(MAT_IN)
-  ori $s1, $zero, %lo(MAT_RES)
-  or $s0, $zero, $zero
+  or $s0, $zero, $s7
+  or $sp, $zero, $zero
+  lqv $v26, 0, 32, $at
+  lqv $v28, 0, 0, $at
   jal DMAWaitIdle
-  or $t0, $zero, $a1
+  lw $s6, %lo(out_w_s + 0)
   LABEL_0001:
-  or $fp, $zero, $zero
+  or $k1, $zero, $zero
   LABEL_0003:
-  or $sp, $zero, $s2
-  lqv $v19, 0, 0, $sp
+  or $k0, $zero, $s0
+  lqv $v19, 0, 0, $k0
   vmudn $v18, $v19, $v28.v
-  lqv $v19, 0, 16, $sp
+  lqv $v19, 0, 16, $k0
   vmadn $v18, $v19, $v27.v
-  lqv $v19, 0, 32, $sp
+  lqv $v19, 0, 32, $k0
+  addu $k0, $k0, $s2
+  addu $s0, $s0, $s3
   vmadn $v18, $v19, $v26.v
-  addu $sp, $sp, $s4
-  lqv $v19, 0, 0, $sp
+  lqv $v19, 0, 0, $k0
   vmadn $v18, $v19, $v25.v
-  lqv $v19, 0, 16, $sp
+  lqv $v19, 0, 16, $k0
   vmadn $v18, $v19, $v24.v
-  lqv $v19, 0, 32, $sp
+  lqv $v19, 0, 32, $k0
+  addu $k0, $k0, $s2
+  addiu $k1, $k1, 1
+  sltu $at, $k1, $s6
   vmadn $v18, $v19, $v23.v
-  addu $sp, $sp, $s4
-  lqv $v19, 0, 0, $sp
+  lqv $v19, 0, 0, $k0
   vmadn $v18, $v19, $v22.v
-  lqv $v19, 0, 16, $sp
+  lqv $v19, 0, 16, $k0
   vmadn $v18, $v19, $v21.v
-  lqv $v19, 0, 32, $sp
+  lqv $v19, 0, 32, $k0
   vmadn $v18, $v19, $v20.v
-  sqv $v18, 0, 0, $s1
-  addiu $s1, $s1, 16
-  addiu $fp, $fp, 1
-  sltu $at, $fp, $s7
+  sqv $v18, 0, 0, $fp
   bne $at, $zero, LABEL_0003
-  addu $s2, $s2, $s5
+  addiu $fp, $fp, 16
   LABEL_0004:
-  addiu $s0, $s0, 1
-  sltu $at, $s0, $s6
+  addiu $sp, $sp, 1
+  sltu $at, $sp, $s5
   bne $at, $zero, LABEL_0001
-  addu $s2, $s2, $s3
+  addu $s0, $s0, $s1
   LABEL_0002:
   addiu $t0, $t0, -1
-  ori $s4, $zero, %lo(MAT_RES)
-  addiu $t2, $zero, -32756
-  jal DMAExec
   or $s0, $zero, $a0
+  jal DMAExec
+  addiu $t2, $zero, -32756
   j RSPQ_Loop
   nop
 

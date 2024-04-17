@@ -139,3 +139,14 @@ This example extends v3 to support strides for depthwise convolution.
 When using a stride greater than 1, the average speedups go from ~8.4x to ~4.4x, since there is now less data reuse.
 
 The RSPL code generation script (`conv2d_rspl_gen.py`) has been upgraded, and now also better calculates the state memory available and being used by our kernel, so that it suggests larger partition sizes.
+
+### Depthwise conv2d stride (v5)
+
+This example extends v4 to work with generic data sizes.
+Whereas previously the code needed to be generated using a Jinja template for a specific data size, now the RSPL code takes arguments, and only needs to be compiled once for all supported data sizes.
+
+Instead, the ucode takes arguments at execution time.
+Since we call out `DepthConv` function many times for each layer (see above for details about the partitions), we don't want to waste memory bandwidth sending the same arguments over and over.
+Therefore we add a `SetArgs` function which is called once and stores the constants in the state.
+
+Similarly, since the sizes of the data and outputs could change, we create a unified `DATA` buffer and store the pointers to the start of each subarray.

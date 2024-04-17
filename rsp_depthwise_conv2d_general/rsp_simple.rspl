@@ -2,15 +2,14 @@
 include "rsp_queue.inc"
 include "rdpq_macros.h"
 
-#define IN_SIZE 136 // 4x(32+2*1) (x8)
-#define W_SIZE 9 // 3x3 (x8)
-#define OSIZE 64 // 2x32 (x8)
+#define SCRATCH_SIZE 213
 
 state
 {
-  vec16 MAT_RES[OSIZE];
-  vec16 MAT_IN[IN_SIZE];
-  vec16 MAT_W[W_SIZE];
+  vec16 DATA[SCRATCH_SIZE]; // global data buffer
+  // u32 addrW; // staritng point of the weights (always 0/DATA)
+  u32 addrX; // starting point of the input
+  u32 addrOut; // starting point of the output
   u32 out_part_h_s;
   u32 out_w_s;
   u32 w_stride_slice_s;
@@ -22,18 +21,23 @@ command<0> DMAInWeights(u32 addressMatW, u32 size)
 {
   addressMatW &= 0xFFFFFF;
   u32<$t0> wsize = size;
-  dma_in_async(MAT_W, addressMatW, wsize);
+  dma_in_async(DATA, addressMatW, wsize);
 }
 
-command<1> DMAInInputs(u32 addressMatInput, u32 size)
-{
-  addressMatInput &= 0xFFFFFF;
-  u32<$t0> xsize = size;
-  dma_in_async(MAT_IN, addressMatInput, xsize);
-}
-
+/**
+ * Set the arguments for the convolution
+ * @param out_part_h
+ * @param out_w
+ * @param w_stride_slice
+ * @param w_slide_byte_offset Byte offset to slide the weights
+ * @param h_slide_byte_offset Byte offset to slide the input
+ * @param w_size Size of the weights in bytes
+ * @param x_size Size of the input in bytes
+ */
 command<3> SetArgs(u32 out_part_h, u32 out_w, u32 w_stride_slice,
-                   u32 w_slide_byte_offset, u32<$s0> h_slide_byte_offset)
+                   u32 w_slide_byte_offset, u32<$s0> h_slide_byte_offset,
+                   u32<$s1> w_size, u32<$s2> x_size
+                  )
 {
   out_part_h &= 0xFFFFFF;
   store(out_part_h, out_part_h_s);
@@ -41,6 +45,22 @@ command<3> SetArgs(u32 out_part_h, u32 out_w, u32 w_stride_slice,
   store(w_stride_slice, w_stride_slice_s);
   store(w_slide_byte_offset, w_slide_byte_offset_s);
   store(h_slide_byte_offset, h_slide_byte_offset_s);
+
+  // Store the start address of the input data and output data
+  u32 dataAddr = DATA;
+  dataAddr += w_size;
+  store(dataAddr, addrX);
+
+  dataAddr += x_size;
+  store(dataAddr, addrOut);
+}
+
+command<1> DMAInInputs(u32 addressMatInput, u32 size)
+{
+  addressMatInput &= 0xFFFFFF;
+  u32<$t0> xsize = size;
+  u32<$s4> DATA_IN = load(addrX);
+  dma_in_async(DATA_IN, addressMatInput, xsize);
 }
 
 /**
@@ -51,29 +71,34 @@ command<3> SetArgs(u32 out_part_h, u32 out_w, u32 w_stride_slice,
 command<2> DepthConv(u32 addressMatOut, u32 out_size)
 {
   addressMatOut &= 0xFFFFFF;
-  u32<$t0> osize = out_size;
+  const u32<$t0> osize = out_size;
 
   // Load constants
-  u32 out_w = load(out_w_s);
-  u32 out_part_h = load(out_part_h_s);
-  u32 w_stride_slice = load(w_stride_slice_s);
-  u32 w_slide_byte_offset = load(w_slide_byte_offset_s);
-  u32 h_slide_byte_offset = load(h_slide_byte_offset_s);
+  const u32 DATA_IN = load(addrX);
+  u32<$s4> DATA_OUT = load(addrOut);
+
+  const u32 out_w = load(out_w_s);
+  const u32 out_part_h = load(out_part_h_s);
+  const u32 w_stride_slice = load(w_stride_slice_s);
+  const u32 w_slide_byte_offset = load(w_slide_byte_offset_s);
+  const u32 h_slide_byte_offset = load(h_slide_byte_offset_s);
+
 
   // VU contains 32 128-bit SIMD registers
-  vec16 Wslice00 = load(MAT_W, 0x00);
-  vec16 Wslice01 = load(MAT_W, 0x10);
-  vec16 Wslice02 = load(MAT_W, 0x20);
-  vec16 Wslice10 = load(MAT_W, 0x30);
-  vec16 Wslice11 = load(MAT_W, 0x40);
-  vec16 Wslice12 = load(MAT_W, 0x50);
-  vec16 Wslice20 = load(MAT_W, 0x60);
-  vec16 Wslice21 = load(MAT_W, 0x70);
-  vec16 Wslice22 = load(MAT_W, 0x80);
+  // Load our 3x3(x8) kernels
+  vec16 Wslice00 = load(DATA, 0x00);
+  vec16 Wslice01 = load(DATA, 0x10);
+  vec16 Wslice02 = load(DATA, 0x20);
+  vec16 Wslice10 = load(DATA, 0x30);
+  vec16 Wslice11 = load(DATA, 0x40);
+  vec16 Wslice12 = load(DATA, 0x50);
+  vec16 Wslice20 = load(DATA, 0x60);
+  vec16 Wslice21 = load(DATA, 0x70);
+  vec16 Wslice22 = load(DATA, 0x80);
 
   // DMA result out
-  u32 xpos_base = MAT_IN;
-  u32 out_pos = MAT_RES;
+  u32 xpos_base = DATA_IN;
+  u32 out_pos = DATA_OUT;
 
   u32 iters_h = 0;
 
@@ -131,5 +156,5 @@ command<2> DepthConv(u32 addressMatOut, u32 out_size)
   } while (iters_h < out_part_h)
 
 
-  dma_out(MAT_RES, addressMatOut, osize);
+  dma_out(DATA_OUT, addressMatOut, osize);
 }

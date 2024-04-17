@@ -149,7 +149,8 @@ RSPDepthConvTiledPadded(int16_t *dest, int16_t *input_data, int16_t *weights,
   /* printf("w_slide_byte_offset: %d\n", w_slide_byte_offset); */
 
   rspq_write(vec_id, SetArgs, output_partition_height, out_w, w_stride_slice,
-             w_slide_byte_offset, h_slide_byte_offset);
+             w_slide_byte_offset, h_slide_byte_offset, w_part_size,
+             in_part_size);
 
   for (int depth_slice = 0; depth_slice < in_c / 8; depth_slice++) {
     int slice_count = 0;
