@@ -58,3 +58,4 @@ dkms.conf
 
 *build/
 *z64
+*.dat
