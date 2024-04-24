@@ -128,7 +128,7 @@ command<2> DepthConv(u32 addressMatOut, u32 out_size)
       // sliding window (across all 8 channels)
       u32 xpos = xpos_base;
       vec16 Xslice = load(xpos);
-      vec16 yslice = Xslice * Wslice00;
+      vec32 yslice = Xslice * Wslice00;
 
       Xslice = load(xpos, 0x10);
       yslice = Xslice +* Wslice01;
@@ -160,14 +160,13 @@ command<2> DepthConv(u32 addressMatOut, u32 out_size)
 
       // increment
       xpos_base += w_stride_slice; // (8*2*{{stride}} 8 channels * 2 bytes * {{stride}} stride)
-      out_pos += 16; // 8*2
+      out_pos += 32; // 8*4
       iters_w += 1;
-    } while (iters_w < out_w)
 
+    } while (iters_w < out_w)
       xpos_base += h_slide_byte_offset; // {{kdim_w}}*8*2 (-16)
     iters_h += 1;
   } while (iters_h < out_part_h)
-
 
   dma_out(DATA_OUT, addressMatOut, osize);
 }

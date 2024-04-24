@@ -5,7 +5,7 @@
 #include <stdio.h>
 
 void sequential_depthwise_conv2d_simd(const int16_t *input_data,
-                                      int16_t *output, const int8_t *weights,
+                                      int32_t *output, const int8_t *weights,
                                       int input_height, int input_width,
                                       int input_depth, int kernel_height,
                                       int kernel_width, int output_height,
@@ -14,5 +14,8 @@ void sequential_depthwise_conv2d_simd(const int16_t *input_data,
 
 void printIntArrayHWC(int16_t *array, int height, int width, int in_c);
 void printInt8ArrayHWC(int8_t *array, int height, int width, int in_c);
+void printInt32ArrayHWC(int32_t *array, int height, int width, int in_c);
+void printInt32ArrayHWC_reorder(int32_t *array, int height, int width,
+                                int in_c);
 
 #endif // UTILS_H_

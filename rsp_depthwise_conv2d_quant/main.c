@@ -10,7 +10,7 @@ DEFINE_RSP_UCODE(rsp_simple);
 
 uint32_t vec_id;
 
-void copy_slice_to_full_with_stride(int16_t *dest, int16_t *output_pad_part,
+void copy_slice_to_full_with_stride(int32_t *dest, int32_t *output_pad_part,
                                     int output_partition_height, int out_w,
                                     int slice_count, int in_depth,
                                     int depth_slice_num, size_t slice_depth,
@@ -22,15 +22,16 @@ void copy_slice_to_full_with_stride(int16_t *dest, int16_t *output_pad_part,
   for (int y = 0; y < max_output_parition_height; y++) {
     for (int x = 0; x < out_w; x++) {
       // Calculate the initial destination address with offsets and strided gaps
-      int16_t *dest_ptr =
+      int32_t *dest_ptr =
           &dest[slice_count * output_partition_height * out_w * in_depth +
                 (y * out_w + x) * in_depth + (depth_slice_num * slice_depth)];
-      /* int16_t *dest_ptr = */
-      /*     &dest[(y * out_w + x) * in_depth + (slice_count * slice_depth)]; */
+
+      int offset = y * out_w * slice_depth + x * slice_depth;
+      uint16_t *src = (uint16_t *)(output_pad_part + offset);
       for (int c = 0; c < slice_depth; c++) {
-        // Perform the copy operation with stride
-        dest_ptr[c] =
-            output_pad_part[y * out_w * slice_depth + x * slice_depth + c];
+        // Perform the copy operation with stride (and reconstruct the 32-bit
+        // values)
+        dest_ptr[c] = ((uint32_t)src[c] << 16) | src[c + 8];
       }
     }
   }
@@ -114,7 +115,7 @@ void generate_padded_slices_with_depth_slice(
 }
 
 static inline void
-RSPDepthConvTiledPadded(int16_t *dest, int16_t *input_data, int8_t *weights,
+RSPDepthConvTiledPadded(int32_t *dest, int16_t *input_data, int8_t *weights,
                         int input_partition_height, int in_h, int in_w,
                         int in_c, int out_h, int out_w, int k_h, int k_w,
                         int output_partition_height, int padding, int stride) {
@@ -133,10 +134,10 @@ RSPDepthConvTiledPadded(int16_t *dest, int16_t *input_data, int8_t *weights,
 
   const int wbytes = sizeof(int8_t);
   const int in_bytes = sizeof(int16_t);
-  const int out_bytes = sizeof(int16_t);
+  const int out_bytes = sizeof(int32_t);
   int16_t *input_pad_part = malloc_uncached_aligned(
       8, input_partition_height * (in_w + 2 * padding) * 8 * in_bytes);
-  int16_t *output_pad_part = malloc_uncached_aligned(
+  int32_t *output_pad_part = malloc_uncached_aligned(
       8, output_partition_height * out_w * 8 * out_bytes);
   const int out_part_size = output_partition_height * out_w * 8;
   const int in_part_size =
@@ -199,13 +200,19 @@ RSPDepthConvTiledPadded(int16_t *dest, int16_t *input_data, int8_t *weights,
         // Cover the case where our final output slice is larger than required
         max_output_partition_height = remaining_out_values / (out_w * 8);
       }
+
+      /* printf("Output slice %d: \n", slice_count); */
+      /* debug_hexdump(output_pad_part, 32 * sizeof(int32_t)); */
       copy_slice_to_full_with_stride(
           dest, output_pad_part, output_partition_height, out_w, slice_count,
           in_c, depth_slice, 8, max_output_partition_height);
       remaining_out_values -= output_partition_height * out_w * 8;
+      /* printf("Post reshape %d: \n", slice_count); */
+      /* debug_hexdump(dest, 32 * sizeof(int32_t)); */
+      // debug_hexdump(dest, 16 * sizeof(int32_t));
 
       /* printf("Output slice %d: \n", slice_count); */
-      /* printIntArrayHWC(output_pad_part, output_partition_height, out_h, 8);
+      /* printInt32ArrayHWC(output_pad_part, output_partition_height, out_h, 8);
        */
 
       /* if (slice_count > 0) */
@@ -232,8 +239,8 @@ int main() {
   vec_init();
   printf("Init'd RSP overlay\n");
 
-  int input_height = 32;
-  int input_width = 32;
+  int input_height = 16;
+  int input_width = 16;
   int input_depth = 16;
   int kernel_height = 3;
   int kernel_width = 3;
@@ -257,39 +264,39 @@ int main() {
   // Allocate and initialize input, output and weights
   const int wbytes = sizeof(int8_t);
   const int in_bytes = sizeof(int16_t);
-  const int out_bytes = sizeof(int16_t);
+  const int out_bytes = sizeof(int32_t);
   int16_t *input_data = malloc_uncached_aligned(8, input_height * input_width *
                                                        input_depth * in_bytes);
-  int16_t *output = malloc_uncached_aligned(8, output_height * output_width *
+  int32_t *output = malloc_uncached_aligned(8, output_height * output_width *
                                                    input_depth * out_bytes);
-
-  int16_t *output_target = malloc_uncached_aligned(
+  int32_t *output_target = malloc_uncached_aligned(
       8, output_height * output_width * input_depth * out_bytes);
   int8_t *weights = malloc_uncached_aligned(8, kernel_height * kernel_width *
                                                    input_depth * wbytes);
 
   // Initialize input data and weights with sequential values for the example
-  int16_t val = 0;
+  int16_t val = 1024;
   int16_t direction = 1;
   for (int i = 0; i < input_height * input_width * input_depth; i++) {
     input_data[i] = val;
     val += direction;
-    if (i % 7 == 6)
+    if (i % 4096 == 4095)
       direction = -direction;
   }
 
-  val = 0;
-  direction = 1;
+  int8_t val2 = -120;
+  int8_t direction2 = 1;
   for (int i = 0; i < kernel_height * kernel_width * input_depth; i++) {
-    weights[i] = val;
-    val += direction;
+    weights[i] = val2;
+    val2 += direction2;
     if (i % 8 == 7) {
-      direction = -direction;
+      direction2 = -direction2;
     }
   }
 
   /* printf("Weights\n"); */
-  /* printIntArrayHWC(weights, kernel_height, kernel_width, input_depth); */
+  /* printInt8ArrayHWC(weights, kernel_height, kernel_width, input_depth); */
+
   int8_t *weights_reshape = malloc_uncached_aligned(
       8, kernel_height * kernel_width * input_depth * wbytes);
   offline_weight_reshape(weights, weights_reshape, kernel_height, kernel_width,
@@ -310,21 +317,6 @@ int main() {
   unsigned long time_spent_cpu = get_ticks() - start;
   printf("\nCPU baseline time (CPU ticks): %lu\n", time_spent_cpu);
 
-  // Print the output
-  /* printf("Target\n"); */
-  /* int max_i = 4; */
-  /* for (int i = 0; i < max_i; i++) { */
-
-  /*   for (int j = 0; j < output_width; j++) { */
-  /*     printf("Target[%d, %d]: ", i, j); */
-  /*     for (int k = 0; k < input_depth; k++) { */
-  /*       printf("%d ", output_target[(i * output_width + j) * input_depth +
-   * k]); */
-  /*     } */
-  /*     printf("\n"); */
-  /*   } */
-  /* } */
-
   rspq_wait();
   start = get_ticks();
   RSPDepthConvTiledPadded(
@@ -334,17 +326,6 @@ int main() {
   rspq_wait();
   unsigned long time_spent_rsp = get_ticks() - start;
   printf("\nRSP time (CPU ticks): %lu\n", time_spent_rsp);
-
-  /* printf("Output (output_width: %d)\n", output_width); */
-  /* for (int i = 0; i < max_i; i++) { */
-  /*   for (int j = 0; j < output_width; j++) { */
-  /*     printf("Output[%d, %d]: ", i, j); */
-  /*     for (int k = 0; k < input_depth; k++) { */
-  /*       printf("%d ", output[(i * output_width + j) * input_depth + k]); */
-  /*     } */
-  /*     printf("\n"); */
-  /*   } */
-  /* } */
 
   // Compare the results
   int differences = 0;
@@ -357,11 +338,14 @@ int main() {
     }
   }
 
-  printf("Output\n");
-  printIntArrayHWC(output, output_height, output_width, input_depth);
+  /* printf("Output\n"); */
+  /* printInt32ArrayHWC(output, output_height, output_width, input_depth); */
+  /* debug_hexdump(output, 64 * sizeof(int32_t)); */
 
-  printf("Output_target\n");
-  printIntArrayHWC(output_target, output_height, output_width, input_depth);
+  /* printf("Output_target\n"); */
+  /* printInt32ArrayHWC(output_target, output_height, output_width,
+   * input_depth); */
+  /* debug_hexdump(output_target, 64 * sizeof(int32_t)); */
 
   if (differences == 0) {
     printf("The RSP computation is correct (speedup %f).\n",
