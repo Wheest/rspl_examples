@@ -1,0 +1,52 @@
+include "rsp_queue.inc"
+include "rdpq_macros.h"
+
+#define MATRIX_SIZE 64
+
+
+state
+{
+  vec16 MAT_C[MATRIX_SIZE];
+}
+
+/**
+ * Transfers matrix from RDRAM to RSP DMEM.
+ *
+ * @param addressMatC RDRAM address of the first matrix
+ */
+command<0> MatCopyIn(u32 addressMatC)
+{
+  addressMatC &= 0xFFFFFF;
+
+  // Perform DMA for Matrix C
+  dma_in(MAT_C, addressMatC);
+
+  // Add one to every element
+  vec16 matL0 = load(MAT_C, 0x00);
+  matL0 += 1;
+  store(matL0, MAT_C, 0x00);
+}
+
+ /**
+ * Transfers matrix from RDRAM to RSP DMEM.
+ *
+ * @param addressMatC RDRAM address of the matrix
+ */
+command<1> MatCopyOut(u32 addressMatC)
+{
+  addressMatC &= 0xFFFFFF;
+
+  // Perform DMA for Matrix C
+  dma_out(MAT_C, addressMatC);
+
+  vec16 data;
+  data.x = 65;
+  data.y = 87;
+  data.z = 82;
+  data.w = 73;
+  data.X = 71;
+  data.Y = 72;
+  data.Z = 84;
+  data.W = 63;
+  store(data, 0);
+ }

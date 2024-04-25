@@ -91,6 +91,22 @@ This example shows this behaviour.
 
 Note that our extra argument is in `$s1` instead of `$s0` (which is what the extra arg example uses) because that register is used by DMA.
 
+## Dump DMEM
+
+In debugging, it is occasionally useful to dump the DMEM (the memory of RSP), and inspect the hex.
+This has helped me in a couple of situations (e.g., identifying the my data is not properly aligned).
+This example shows the behaviour, using the `rsp_read_data` function, and `debug_hexdump`.
+It shows how the RSP code inserts the string "AWRIGHT?" into memory:
+
+```
+0000  00 41 00 57 00 52 00 49  00 47 00 48 00 54 00 3f   |.A.W.R.I.G.H.T.?|
+0010  80 00 40 00 20 00 10 00  08 00 04 00 02 00 01 00   |..@. ...........|
+0020  00 10 00 00 00 00 00 00  00 00 00 00 00 00 00 00   |................|
+```
+
+Libdragon shows each bytes as an ASCII character on the right, which can also be handy for marking areas of memory.
+Note for reading the hex dump, the `*` character is used to denote that lines of memory are identical.
+
 ## Depthwise convolution
 
 The following are examples of running the [depthwise convolution operation](https://paperswithcode.com/method/depthwise-convolution), at increasing levels of complexity.
