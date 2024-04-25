@@ -1,0 +1,66 @@
+include "rsp_queue.inc"
+include "rdpq_macros.h"
+
+#define DSIZE 2
+
+
+state
+{
+  vec16 DATA_X[DSIZE];
+  vec16 DATA_W[DSIZE];
+  vec32 DATA_Y[DSIZE];
+}
+
+command<0> ComputeWrong(u32 addressY, u32 addressX, u32 addressW)
+{
+  addressY &= 0xFFFFFF;
+
+
+  dma_in(DATA_Y, addressY);
+  dma_in(DATA_X, addressX);
+  dma_in(DATA_W, addressW);
+
+
+  vec16 w0 = load_vec_s8(DATA_W, 0x00);
+  w0 >>= 8;
+  vec16 x0 = load_vec_s8(DATA_X, 0x00);
+  x0 >>= 8;
+  vec32 y = w0 * x0;
+
+  vec16 w = load_vec_s8(DATA_W, 0x08);
+  w >>= 8;
+  vec16 x = load_vec_s8(DATA_X, 0x08);
+  x >>= 8;
+
+  y = w +* x;
+
+  store(y, DATA_Y, 0x00);
+  dma_out(DATA_Y, addressY);
+}
+
+command<1> ComputeCorrect(u32 addressY, u32 addressX, u32 addressW)
+{
+  addressY &= 0xFFFFFF;
+
+
+  dma_in(DATA_Y, addressY);
+  dma_in(DATA_X, addressX);
+  dma_in(DATA_W, addressW);
+
+
+  vec16 w0 = load_vec_s8(DATA_W, 0x00);
+  w0 >>= 8;
+  vec16 x0 = load_vec_s8(DATA_X, 0x00);
+  x0 >>= 8;
+
+  vec16 w = load_vec_s8(DATA_W, 0x08);
+  w >>= 8;
+  vec16 x = load_vec_s8(DATA_X, 0x08);
+  x >>= 8;
+
+  vec32 y = w0 * x0;
+  y = w +* x;
+
+  store(y, DATA_Y, 0x00);
+  dma_out(DATA_Y, addressY);
+}

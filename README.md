@@ -107,6 +107,56 @@ It shows how the RSP code inserts the string "AWRIGHT?" into memory:
 Libdragon shows each bytes as an ASCII character on the right, which can also be handy for marking areas of memory.
 Note for reading the hex dump, the `*` character is used to denote that lines of memory are identical.
 
+## Unusual accumulation
+
+This example highlights a potential source of bugs which comes from how MACs (multiply-accumulate operations) work on the RSP.
+
+In this example, we have 4 values, `w0`, `x0`, `w`, and `x`.  We want to compute `(w0 * x0) + (w * x)`, onto a `vec32` register.
+
+The values are packed 8-bit integers, so we need to unpack them the `load_vec_s8` method and right-shift them.
+
+You might have some RSPL code which looks something like:
+
+``` javascript
+vec16 w0 = load_vec_s8(DATA_W, 0x00);
+w0 >>= 8;
+vec16 x0 = load_vec_s8(DATA_X, 0x00);
+x0 >>= 8;
+vec32 y = w0 * x0;
+
+vec16 w = load_vec_s8(DATA_W, 0x08);
+w >>= 8;
+vec16 x = load_vec_s8(DATA_X, 0x08);
+x >>= 8;
+
+y = w +* x;
+```
+
+However, this gives an incorrect result, because it introduces a subtle bug.
+The problem is the special accumulator register used in the RSP.
+Normally, our vector registers are 128-bit, with 8 16-bit lanes.
+We can also compute 32-bit values using 2 registers.
+
+However, for certain operations we may require more bits, which is why the N64's RSP has a 48 bit-per-lane special register meant to hold intermediate calculations without overflowing.
+However, there is only one of these registers, and the bug that we're seeing here is that the right-shift operator `>>` is touching this register.
+
+Therefore, to fix this we need to reorder our computation so that our MAC is not interrupted by the right shift:
+
+``` javascript
+vec16 w0 = load_vec_s8(DATA_W, 0x00);
+w0 >>= 8;
+vec16 x0 = load_vec_s8(DATA_X, 0x00);
+x0 >>= 8;
+
+vec16 w = load_vec_s8(DATA_W, 0x08);
+w >>= 8;
+vec16 x = load_vec_s8(DATA_X, 0x08);
+x >>= 8;
+
+vec32 y = w0 * x0;
+y = w +* x;
+```
+
 ## Depthwise convolution
 
 The following are examples of running the [depthwise convolution operation](https://paperswithcode.com/method/depthwise-convolution), at increasing levels of complexity.
