@@ -109,131 +109,140 @@
 DMAInWeights:
   lui $at, 0xFF
   ori $at, $at, 0xFFFF
-  or $t2, $zero, $zero
-  or $t0, $zero, $a1
   and $a0, $a0, $at
-  ori $s4, $zero, %lo(DATA)
-  or $s0, $zero, $a0
-  j DMAExec ## Args: $t0, $t1, $s0, $s4, $t2
+  or $t0, $zero, $a1
   addiu $t0, $t0, -1
+  ori $s4, $zero, %lo(DATA)
+  or $t2, $zero, $zero
+  j DMAExec ## Args: $t0, $t1, $s0, $s4, $t2
+  or $s0, $zero, $a0
 SetArgs:
-  lw $s1, %lo(RSPQ_DMEM_BUFFER) - 8($gp)
-  ori $s7, $zero, %lo(DATA)
-  lui $at, 0xFF
   lw $s0, %lo(RSPQ_DMEM_BUFFER) - 12($gp)
-  addu $s7, $s7, $s1
+  lw $s1, %lo(RSPQ_DMEM_BUFFER) - 8($gp)
+  lw $s2, %lo(RSPQ_DMEM_BUFFER) - 4($gp)
+  lui $at, 0xFF
   ori $at, $at, 0xFFFF
-  addiu $s7, $s7, 15
+  and $a0, $a0, $at
+  sw $a1, %lo(out_w_s)($zero)
   sw $a2, %lo(w_stride_slice_s)($zero)
   sw $a3, %lo(w_slide_byte_offset_s)($zero)
-  and $a0, $a0, $at
+  sw $s0, %lo(h_slide_byte_offset_s)($zero)
+  ori $s7, $zero, %lo(DATA)
+  addu $s7, $s7, $s1
+  addiu $s7, $s7, 15
   addiu $at, $zero, -16
   and $s7, $s7, $at
   sw $s7, %lo(addrX)($zero)
-  sw $a0, %lo(out_part_h_s)($zero)
-  sw $s0, %lo(h_slide_byte_offset_s)($zero)
-  sw $a1, %lo(out_w_s)($zero)
-  lw $s2, %lo(RSPQ_DMEM_BUFFER) - 4($gp)
-  addiu $at, $zero, -16
   addiu $s7, $s7, 15
+  addiu $at, $zero, -16
   and $s7, $s7, $at
   addu $s7, $s7, $s2
-  j RSPQ_Loop
   sw $s7, %lo(addrOut)($zero)
+  j RSPQ_Loop
+  sw $a0, %lo(out_part_h_s)($zero)
 DMAInInputs:
-  or $t2, $zero, $zero
-  or $t0, $zero, $a1
   lui $at, 0xFF
-  lw $s4, %lo(addrX + 0)
-  addiu $t0, $t0, -1
   ori $at, $at, 0xFFFF
   and $a0, $a0, $at
-  j DMAExec ## Args: $t0, $t1, $s0, $s4, $t2
+  or $t0, $zero, $a1
   or $s0, $zero, $a0
+  addiu $t0, $t0, -1
+  or $t2, $zero, $zero
+  j DMAExec ## Args: $t0, $t1, $s0, $s4, $t2
+  lw $s4, %lo(addrX + 0)
 DepthConv:
   lui $at, 0xFF
   ori $at, $at, 0xFFFF
   and $a0, $a0, $at
-  ori $at, $zero, %lo(DATA)
-  lpv $v27, 0, 8, $at
-  lpv $v26, 0, 16, $at
-  lw $s4, %lo(addrOut + 0)
-  lpv $v24, 0, 32, $at
-  lw $s1, %lo(h_slide_byte_offset_s + 0)
-  or $t0, $zero, $a1
-  lpv $v28, 0, 0, $at
-  lpv $v21, 0, 56, $at
-  lpv $v23, 0, 40, $at
   lw $s7, %lo(addrX + 0)
-  or $sp, $zero, $zero
-  vmudm $v28, $v28, $v31.e7
-  lpv $v25, 0, 24, $at
-  lpv $v22, 0, 48, $at
-  or $fp, $zero, $s4
-  vmudm $v27, $v27, $v31.e7
-  lpv $v20, 0, 64, $at
-  vmudm $v26, $v26, $v31.e7
+  lw $s4, %lo(addrOut + 0)
   lw $s6, %lo(out_w_s + 0)
-  lw $s3, %lo(w_stride_slice_s + 0)
-  vmudm $v25, $v25, $v31.e7
-  or $s0, $zero, $s7
-  vmudm $v24, $v24, $v31.e7
-  lw $s2, %lo(w_slide_byte_offset_s + 0)
-  vmudm $v23, $v23, $v31.e7
-  vmudm $v22, $v22, $v31.e7
   lw $s5, %lo(out_part_h_s + 0)
+  lw $s3, %lo(w_stride_slice_s + 0)
+  lw $s2, %lo(w_slide_byte_offset_s + 0)
+  lw $s1, %lo(h_slide_byte_offset_s + 0)
+  ori $at, $zero, %lo(DATA)
+  lpv $v28, 0, 0, $at
+  vmudm $v28, $v28, $v31.e7
+  lpv $v27, 0, 8, $at
+  vmudm $v27, $v27, $v31.e7
+  lpv $v26, 0, 16, $at
+  vmudm $v26, $v26, $v31.e7
+  lpv $v25, 0, 24, $at
+  vmudm $v25, $v25, $v31.e7
+  lpv $v24, 0, 32, $at
+  vmudm $v24, $v24, $v31.e7
+  lpv $v23, 0, 40, $at
+  vmudm $v23, $v23, $v31.e7
+  lpv $v22, 0, 48, $at
+  vmudm $v22, $v22, $v31.e7
+  lpv $v21, 0, 56, $at
   vmudm $v21, $v21, $v31.e7
-  jal DMAWaitIdle
+  lpv $v20, 0, 64, $at
   vmudm $v20, $v20, $v31.e7
+  or $s0, $zero, $s7
+  or $fp, $zero, $s4
+  or $sp, $zero, $zero
+  jal DMAWaitIdle
+  or $t0, $zero, $a1
   LABEL_0001:
   or $k1, $zero, $zero
   LABEL_0003:
   or $k0, $zero, $s0
-  lqv $v19, 0, 0, $k0
-  vmudh $v18, $v19, $v28.v
-  lqv $v19, 0, 16, $k0
-  vsar $v17, COP2_ACC_HI
-  addiu $k1, $k1, 1
-  vsar $v18, COP2_ACC_MD
-  vmadh $v18, $v19, $v27.v
-  lqv $v19, 0, 32, $k0
-  vsar $v17, COP2_ACC_HI
-  sltu $at, $k1, $s6
+  lpv $v19, 0, 0, $k0
+  vmudm $v19, $v19, $v31.e7
+  lpv $v18, 0, 8, $k0
+  vmudm $v18, $v18, $v31.e7
+  lpv $v17, 0, 16, $k0
+  vmudm $v17, $v17, $v31.e7
   addu $k0, $k0, $s2
-  vsar $v18, COP2_ACC_MD
-  vmadh $v18, $v19, $v26.v
-  lqv $v19, 0, 0, $k0
-  vsar $v17, COP2_ACC_HI
-  vsar $v18, COP2_ACC_MD
-  vmadh $v18, $v19, $v25.v
-  lqv $v19, 0, 16, $k0
-  vsar $v17, COP2_ACC_HI
-  vsar $v18, COP2_ACC_MD
-  vmadh $v18, $v19, $v24.v
-  lqv $v19, 0, 32, $k0
+  lpv $v16, 0, 0, $k0
+  vmudm $v16, $v16, $v31.e7
+  lpv $v15, 0, 8, $k0
+  vmudm $v15, $v15, $v31.e7
+  lpv $v14, 0, 16, $k0
+  vmudm $v14, $v14, $v31.e7
   addu $k0, $k0, $s2
-  vsar $v18, COP2_ACC_MD
-  vsar $v17, COP2_ACC_HI
-  vmadh $v18, $v19, $v23.v
-  lqv $v19, 0, 0, $k0
-  vsar $v18, COP2_ACC_MD
-  vsar $v17, COP2_ACC_HI
-  vmadh $v18, $v19, $v22.v
-  lqv $v19, 0, 16, $k0
-  vsar $v18, COP2_ACC_MD
-  vsar $v17, COP2_ACC_HI
-  vmadh $v18, $v19, $v21.v
-  lqv $v19, 0, 32, $k0
-  vsar $v17, COP2_ACC_HI
-  vsar $v18, COP2_ACC_MD
-  vmadh $v18, $v19, $v20.v
-  vsar $v18, COP2_ACC_MD
-  vsar $v17, COP2_ACC_HI
-  addu $s0, $s0, $s3
-  sqv $v18, 0, 16, $fp
-  sqv $v17, 0, 0, $fp
-  bne $at, $zero, LABEL_0003
+  lpv $v13, 0, 0, $k0
+  vmudm $v13, $v13, $v31.e7
+  lpv $v12, 0, 8, $k0
+  vmudm $v12, $v12, $v31.e7
+  lpv $v11, 0, 16, $k0
+  vmudm $v11, $v11, $v31.e7
+  vmudh $v10, $v19, $v28.v
+  vsar $v09, COP2_ACC_HI
+  vsar $v10, COP2_ACC_MD
+  vmadh $v10, $v18, $v27.v
+  vsar $v09, COP2_ACC_HI
+  vsar $v10, COP2_ACC_MD
+  vmadh $v10, $v17, $v26.v
+  vsar $v09, COP2_ACC_HI
+  vsar $v10, COP2_ACC_MD
+  vmadh $v10, $v16, $v25.v
+  vsar $v09, COP2_ACC_HI
+  vsar $v10, COP2_ACC_MD
+  vmadh $v10, $v15, $v24.v
+  vsar $v09, COP2_ACC_HI
+  vsar $v10, COP2_ACC_MD
+  vmadh $v10, $v14, $v23.v
+  vsar $v09, COP2_ACC_HI
+  vsar $v10, COP2_ACC_MD
+  vmadh $v10, $v13, $v22.v
+  vsar $v09, COP2_ACC_HI
+  vsar $v10, COP2_ACC_MD
+  vmadh $v10, $v12, $v21.v
+  vsar $v09, COP2_ACC_HI
+  vsar $v10, COP2_ACC_MD
+  vmadh $v10, $v11, $v20.v
+  vsar $v09, COP2_ACC_HI
+  vsar $v10, COP2_ACC_MD
+  sqv $v09, 0, 0, $fp
+  sqv $v10, 0, 16, $fp
   addiu $fp, $fp, 32
+  addiu $k1, $k1, 1
+  sltu $at, $k1, $s6
+  bne $at, $zero, LABEL_0003
+  addu $s0, $s0, $s3
   LABEL_0004:
   addiu $sp, $sp, 1
   sltu $at, $sp, $s5
@@ -241,9 +250,9 @@ DepthConv:
   addu $s0, $s0, $s1
   LABEL_0002:
   addiu $t0, $t0, -1
-  or $s0, $zero, $a0
-  jal DMAExec ## Args: $t0, $t1, $s0, $s4, $t2
   addiu $t2, $zero, -32756
+  jal DMAExec ## Args: $t0, $t1, $s0, $s4, $t2
+  or $s0, $zero, $a0
   j RSPQ_Loop
   nop
 

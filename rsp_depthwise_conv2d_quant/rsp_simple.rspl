@@ -127,34 +127,47 @@ command<2> DepthConv(u32 addressMatOut, u32 out_size)
       // Each iteration of this loop calculate a single 3x3
       // sliding window (across all 8 channels)
       u32 xpos = xpos_base;
-      vec16 Xslice = load(xpos);
-      vec32 yslice = Xslice * Wslice00;
 
-      Xslice = load(xpos, 0x10);
-      yslice = Xslice +* Wslice01;
+      vec16 Xslice0 = load_vec_s8(xpos);
+      Xslice0 >>= 8;
 
-      Xslice = load(xpos, 0x20);
-      yslice = Xslice +* Wslice02;
+      vec16 Xslice1 = load_vec_s8(xpos, 0x08);
+      Xslice1 >>= 8;
+
+      vec16 Xslice2 = load_vec_s8(xpos, 0x10);
+      Xslice2 >>= 8;
 
       xpos += w_slide_byte_offset; // ({{in_w}}+2*{{padding}})*8*2
-      Xslice = load(xpos);
-      yslice = Xslice +* Wslice10;
 
-      Xslice = load(xpos, 0x10);
-      yslice = Xslice +* Wslice11;
+      vec16 Xslice3 = load_vec_s8(xpos);
+      Xslice3 >>= 8;
 
-      Xslice = load(xpos, 0x20);
-      yslice = Xslice +* Wslice12;
+      vec16 Xslice4 = load_vec_s8(xpos, 0x08);
+      Xslice4 >>= 8;
+
+      vec16 Xslice5 = load_vec_s8(xpos, 0x10);
+      Xslice5 >>= 8;
 
       xpos += w_slide_byte_offset; // ({{in_w}}+2*{{padding}})*8*2;
-      Xslice = load(xpos);
-      yslice = Xslice +* Wslice20;
 
-      Xslice = load(xpos, 0x10);
-      yslice = Xslice +* Wslice21;
+      vec16 Xslice6 = load_vec_s8(xpos);
+      Xslice6 >>= 8;
 
-      Xslice = load(xpos, 0x20);
-      yslice = Xslice +* Wslice22;
+      vec16 Xslice7 = load_vec_s8(xpos, 0x08);
+      Xslice7 >>= 8;
+
+      vec16 Xslice8 = load_vec_s8(xpos, 0x10);
+      Xslice8 >>= 8;
+
+      vec32 yslice = Xslice0 * Wslice00;
+      yslice = Xslice1 +* Wslice01;
+      yslice = Xslice2 +* Wslice02;
+      yslice = Xslice3 +* Wslice10;
+      yslice = Xslice4 +* Wslice11;
+      yslice = Xslice5 +* Wslice12;
+      yslice = Xslice6 +* Wslice20;
+      yslice = Xslice7 +* Wslice21;
+      yslice = Xslice8 +* Wslice22;
 
       store(yslice, out_pos); // we could just DMA this back at this point
 

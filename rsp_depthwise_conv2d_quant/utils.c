@@ -1,12 +1,11 @@
 #include "utils.h"
 
-void sequential_depthwise_conv2d_simd(const int16_t *input_data,
-                                      int32_t *output, const int8_t *weights,
-                                      int input_height, int input_width,
-                                      int input_depth, int kernel_height,
-                                      int kernel_width, int output_height,
-                                      int output_width, int stride,
-                                      int padding) {
+void sequential_depthwise_conv2d_simd(const int8_t *input_data, int32_t *output,
+                                      const int8_t *weights, int input_height,
+                                      int input_width, int input_depth,
+                                      int kernel_height, int kernel_width,
+                                      int output_height, int output_width,
+                                      int stride, int padding) {
   int vector_size = 8; // Simulate a SIMD vector size of 8
   for (int h = 0; h < output_height; h++) {
     for (int w = 0; w < output_width; w++) {
