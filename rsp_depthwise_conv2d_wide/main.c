@@ -5,6 +5,8 @@
 
 #define RSPQ_DEBUG 1
 #define RSPQ_PROFILE 1
+#define PRINT_DEBUG 0
+#define OUTPUT_PRINT 0
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 DEFINE_RSP_UCODE(rsp_simple);
@@ -149,8 +151,10 @@ RSPDepthConvTiledPadded(int32_t *dest, int8_t *input_data, int8_t *weights,
     return;
   }
 
-  /* printf("Weights reshape\n"); */
-  /* printInt8ArrayHWC(weights, 3, 3, 8); */
+  if (PRINT_DEBUG) {
+    printf("Weights reshape\n");
+    printInt8ArrayHWC(weights, 3, 3, 8);
+  }
 
   const int wbytes = sizeof(int8_t);
   const int in_bytes = sizeof(int8_t);
@@ -158,25 +162,39 @@ RSPDepthConvTiledPadded(int32_t *dest, int8_t *input_data, int8_t *weights,
 
   const int in_part_size =
       input_partition_height * input_partition_width * 8 * in_bytes;
-  int8_t *input_pad_part = malloc_uncached_aligned(8, in_part_size);
+  int8_t *input_pad_part = malloc_uncached_aligned(16, in_part_size);
 
   const int out_part_size =
       output_partition_height * output_partition_width * 8;
   int32_t *output_pad_part =
-      malloc_uncached_aligned(8, out_part_size * out_bytes);
+      malloc_uncached_aligned(16, out_part_size * out_bytes);
 
   const int w_part_size = k_h * k_w * 8 * wbytes;
 
   const int overlap = k_h - stride;
-  const int w_stride_slice = 8 * in_bytes * stride;
-  const int w_slide_byte_offset = 8 * in_bytes * (input_partition_width);
-  const int h_slide_byte_offset =
-      (k_w * 8 * in_bytes) - (in_bytes * 8) +
-      (stride - 1) * 8 * (in_h + 2 * padding) * in_bytes;
+
+  // the number of bytes to offset our input data pointer by between elements
+  // in the same window.  I.e., if our pointer is at 0, how does it get to 5?
+  // |*0, 1, 2,| 3, 4
+  // | 5, 6, 7,| 8, 9
+  // |10,11,12,|13,14
+  //  15,16,17,18,19
+  const int w_slide_byte_offset = (8 * in_bytes * input_partition_width);
+
+  // when we slide right for a new window, the number of bytes to offset our
+  // input data pointer
+  const int w_window_stride = 8 * in_bytes * stride;
+  // when we slide  for a new window, the number of bytes to offset our
+  // input data pointer
+  const int h_window_stride =
+      (8 * in_bytes) *                  /*account for our depth of 8*/
+      ((input_partition_width * stride) /*move the pointer vertically down*/
+       - /*move the pointer back left to the start of the row*/
+       (output_partition_width * stride));
 
   rspq_write(vec_id, SetArgs, output_partition_height, output_partition_width,
-             w_stride_slice, w_slide_byte_offset, h_slide_byte_offset,
-             w_part_size, in_part_size);
+             w_window_stride, w_slide_byte_offset, h_window_stride, w_part_size,
+             in_part_size);
 
   const int num_h_partitions = ceil((float)(in_h + 2 * padding - overlap) /
                                     (input_partition_height - overlap));
@@ -211,9 +229,11 @@ RSPDepthConvTiledPadded(int32_t *dest, int8_t *input_data, int8_t *weights,
            w_slice_count++) {
         rspq_wait();
 
-        /* printf("Input slice %d, %d : \n", h_slice_count, w_slice_count); */
-        /* printInt8ArrayHWC(input_pad_part, input_partition_height, */
-        /*                   input_partition_width, 8); */
+        if (PRINT_DEBUG) {
+          printf("Input slice %d, %d : \n", h_slice_count, w_slice_count);
+          printInt8ArrayHWC(input_pad_part, input_partition_height,
+                            input_partition_width, 8);
+        }
 
         // Process the padded partition on the RSP
         rspq_write(vec_id, DepthConv, PhysicalAddr(output_pad_part),
@@ -238,7 +258,6 @@ RSPDepthConvTiledPadded(int32_t *dest, int8_t *input_data, int8_t *weights,
         rspq_wait();
         rspq_write(vec_id, DMAInputs, PhysicalAddr(input_pad_part),
                    in_part_size);
-        /* printf("DMA inputs again!\n"); */
 
         copy_output_slice_to_full(
             dest, output_pad_part, output_partition_height,
@@ -248,18 +267,12 @@ RSPDepthConvTiledPadded(int32_t *dest, int8_t *input_data, int8_t *weights,
         remaining_out_values -=
             output_partition_height * output_partition_width * 8;
 
-        /* printf("Output slice %d, %d: \n", h_slice_count, w_slice_count); */
-        /* printInt32ArrayHWC_reorder(output_pad_part, output_partition_height,
-         */
-        /*                            output_partition_width, 8); */
-        /* if (h_slice_count == 1 && w_slice_count == 1) { */
-        /*   goto end; */
-        /*   /\* printf("Output slice %d, %d: \n", h_slice_count,
-         * w_slice_count); *\/ */
-        /*   /\* printInt32ArrayHWC_reorder(output_pad_part, */
-        /*    * output_partition_height, *\/ */
-        /*   /\*                            output_partition_width, 8); *\/ */
-        /* } */
+        if (PRINT_DEBUG) {
+          printf("Output slice %d, %d: \n", h_slice_count, w_slice_count);
+          /* debug_hexdump(output_pad_part, out_part_size * out_bytes); */
+          printInt32ArrayHWC_reorder(output_pad_part, output_partition_height,
+                                     output_partition_width, 8);
+        }
       }
 
       // May need to adjust the max_output_partition_height for the final
@@ -274,7 +287,7 @@ RSPDepthConvTiledPadded(int32_t *dest, int8_t *input_data, int8_t *weights,
   free_uncached(output_pad_part);
 }
 
-void depthwise_convolution(const int input_height, const int input_width,
+bool depthwise_convolution(const int input_height, const int input_width,
                            const int input_depth, const int kernel_height,
                            const int kernel_width, const int stride,
                            const int padding, const int input_partition_height,
@@ -292,23 +305,54 @@ void depthwise_convolution(const int input_height, const int input_width,
   printf("Output shape: %d x %d x %d\n", output_height, output_width,
          input_depth);
 
+  // assert that the partitioning is less than or equal to the input and output
+  if (input_partition_height > (input_height + 2 * padding)) {
+    printf("Error: input_partition_height %d must be less than or equal to "
+           "input_height (%d) + 2*padding\n",
+           input_partition_height, input_height);
+    return false;
+  }
+  if (input_partition_width > (input_width + 2 * padding)) {
+    printf("Error: input_partition_width %d must be less than or equal to "
+           "input_width (%d) + 2*padding\n",
+           input_partition_width, input_width);
+    return false;
+  }
+  if (output_partition_height > output_height) {
+    printf("Error: output_partition_height %d must be less than or equal to "
+           "output_height %d\n",
+           output_partition_height, output_height);
+    return false;
+  }
+  if (output_partition_width > output_width) {
+    printf("Error: output_partition_width %d must be less than or equal to "
+           "output_width %d\n",
+           output_partition_width, output_width);
+    return false;
+  }
+
   // Allocate and initialize input, output and weights
   const int wbytes = sizeof(int8_t);
   const int in_bytes = sizeof(int8_t);
   const int out_bytes = sizeof(int32_t);
-  int8_t *input_data = malloc_uncached_aligned(8, input_height * input_width *
-                                                      input_depth * in_bytes);
-  int32_t *output = malloc_uncached_aligned(8, output_height * output_width *
-                                                   input_depth * out_bytes);
+  int8_t *input_data = malloc_uncached_aligned(16, input_height * input_width *
+                                                       input_depth * in_bytes);
+  int32_t *output = malloc_uncached_aligned(16, output_height * output_width *
+                                                    input_depth * out_bytes);
   int32_t *output_target = malloc_uncached_aligned(
       8, output_height * output_width * input_depth * out_bytes);
-  int8_t *weights = malloc_uncached_aligned(8, kernel_height * kernel_width *
-                                                   input_depth * wbytes);
+  int8_t *weights = malloc_uncached_aligned(16, kernel_height * kernel_width *
+                                                    input_depth * wbytes);
 
   // Initialize input data and weights with sequential values for the
   // example (not there will be overflow, but int32 accumulation won't care)
   for (int i = 0; i < input_height * input_width * input_depth; i++) {
     input_data[i] = i;
+  }
+
+  if (PRINT_DEBUG) {
+    printf("input_data\n");
+    printInt8ArrayHWC(input_data, input_height, input_width, input_depth);
   }
 
   for (int i = 0; i < kernel_height * kernel_width * input_depth; i++) {
@@ -320,7 +364,7 @@ void depthwise_convolution(const int input_height, const int input_width,
    */
 
   int8_t *weights_reshape = malloc_uncached_aligned(
-      8, kernel_height * kernel_width * input_depth * wbytes);
+      16, kernel_height * kernel_width * input_depth * wbytes);
   offline_weight_reshape(weights, weights_reshape, kernel_height, kernel_width,
                          input_depth, 8);
 
@@ -355,19 +399,17 @@ void depthwise_convolution(const int input_height, const int input_width,
   int differences = 0;
   for (int i = 0; i < output_height * output_width * input_depth; ++i) {
     if (output[i] != output_target[i]) {
-      /* printf("Difference found at index %d: %d (RSP) vs %d (C)\n", i,
-       * output[i], */
-      /*        output_target[i]); */
       differences++;
     }
   }
 
-  /* printf("Output\n"); */
-  /* printInt32ArrayHWC(output, output_height, output_width, input_depth); */
+  if (PRINT_DEBUG || OUTPUT_PRINT) {
+    printf("Output\n");
+    printInt32ArrayHWC(output, output_height, output_width, input_depth);
 
-  /* printf("Output_target\n"); */
-  /* printInt32ArrayHWC(output_target, output_height, output_width,
-   * input_depth); */
+    printf("Output_target\n");
+    printInt32ArrayHWC(output_target, output_height, output_width, input_depth);
+  }
 
   if (differences == 0) {
     printf("The RSP computation is correct (speedup %f).\n",
@@ -376,67 +418,192 @@ void depthwise_convolution(const int input_height, const int input_width,
     printf("There are %d differences. The RSP computation is not correct.\n",
            differences);
   }
+
   free_uncached(input_data);
   free_uncached(output);
   printf("---------------------------------\n\n");
+  return differences == 0;
 }
 
 void tests() {
-  depthwise_convolution(
+  bool all_passed = true;
+  all_passed &= depthwise_convolution(
       /*input_height=*/4, /*input_width=*/4,
       /*input_depth=*/8, /*kernel_height=*/3, /*kernel_width=*/3,
       /*stride=*/1, /*padding=*/0, /*input_partition_height=*/4,
       /*input_partition_width=*/4, /*output_partition_height=*/2,
       /*output_partition_width=*/2);
 
-  depthwise_convolution(
+  all_passed &= depthwise_convolution(
       /*input_height=*/4, /*input_width=*/4,
       /*input_depth=*/16, /*kernel_height=*/3, /*kernel_width=*/3,
       /*stride=*/1, /*padding=*/0, /*input_partition_height=*/4,
       /*input_partition_width=*/4, /*output_partition_height=*/2,
       /*output_partition_width=*/2);
 
-  depthwise_convolution(
+  all_passed &= depthwise_convolution(
       /*input_height=*/8, /*input_width=*/8,
       /*input_depth=*/8, /*kernel_height=*/3, /*kernel_width=*/3,
       /*stride=*/1, /*padding=*/0, /*input_partition_height=*/8,
       /*input_partition_width=*/8, /*output_partition_height=*/6,
       /*output_partition_width=*/6);
 
-  depthwise_convolution(
+  all_passed &= depthwise_convolution(
       /*input_height=*/10, /*input_width=*/10,
       /*input_depth=*/8, /*kernel_height=*/3, /*kernel_width=*/3,
       /*stride=*/1, /*padding=*/1, /*input_partition_height=*/7,
       /*input_partition_width=*/12, /*output_partition_height=*/5,
       /*output_partition_width=*/10);
 
-  depthwise_convolution(
+  all_passed &= depthwise_convolution(
       /*input_height=*/32, /*input_width=*/32,
       /*input_depth=*/8, /*kernel_height=*/3, /*kernel_width=*/3,
       /*stride=*/1, /*padding=*/0, /*input_partition_height=*/3,
       /*input_partition_width=*/32, /*output_partition_height=*/1,
       /*output_partition_width=*/30);
 
-  depthwise_convolution(
+  all_passed &= depthwise_convolution(
       /*input_height=*/32, /*input_width=*/32,
       /*input_depth=*/16, /*kernel_height=*/3, /*kernel_width=*/3,
       /*stride=*/1, /*padding=*/0, /*input_partition_height=*/3,
       /*input_partition_width=*/32, /*output_partition_height=*/1,
       /*output_partition_width=*/30);
 
-  depthwise_convolution(
-      /*input_height=*/32, /*input_width=*/32,
+  all_passed &= depthwise_convolution(
+      /*input_height=*/32,
+      /*input_width=*/32,
       /*input_depth=*/16, /*kernel_height=*/3, /*kernel_width=*/3,
       /*stride=*/1, /*padding=*/1, /*input_partition_height=*/5,
       /*input_partition_width=*/18, /*output_partition_height=*/3,
       /*output_partition_width=*/16);
 
-  depthwise_convolution(
+  all_passed &= depthwise_convolution(
       /*input_height=*/16, /*input_width=*/16,
       /*input_depth=*/8, /*kernel_height=*/3, /*kernel_width=*/3,
       /*stride=*/1, /*padding=*/1, /*input_partition_height=*/5,
-      /*input_partition_width=*/10, /*output_partition_height=*/3,
+      /*input_partition_width=*/18, /*output_partition_height=*/3,
+      /*output_partition_width=*/16);
+
+  all_passed &= depthwise_convolution(
+      /*input_height=*/8, /*input_width=*/8,
+      /*input_depth=*/8, /*kernel_height=*/3, /*kernel_width=*/3,
+      /*stride=*/1, /*padding=*/1, /*input_partition_height=*/7,
+      /*input_partition_width=*/10, /*output_partition_height=*/5,
       /*output_partition_width=*/8);
+
+  all_passed &= depthwise_convolution(
+      /*input_height=*/16, /*input_width=*/16,
+      /*input_depth=*/8, /*kernel_height=*/3, /*kernel_width=*/3,
+      /*stride=*/1, /*padding=*/0, /*input_partition_height=*/6,
+      /*input_partition_width=*/16, /*output_partition_height=*/4,
+      /*output_partition_width=*/14);
+
+  all_passed &= depthwise_convolution(
+      /*input_height=*/16, /*input_width=*/16,
+      /*input_depth=*/8, /*kernel_height=*/3, /*kernel_width=*/3,
+      /*stride=*/1, /*padding=*/0, /*input_partition_height=*/5,
+      /*input_partition_width=*/16, /*output_partition_height=*/3,
+      /*output_partition_width=*/14);
+
+  all_passed &= depthwise_convolution(
+      /*input_height=*/16, /*input_width=*/16,
+      /*input_depth=*/8, /*kernel_height=*/3, /*kernel_width=*/3,
+      /*stride=*/1, /*padding=*/0, /*input_partition_height=*/5,
+      /*input_partition_width=*/16, /*output_partition_height=*/3,
+      /*output_partition_width=*/14);
+
+  all_passed &= depthwise_convolution(
+      /*input_height=*/8, /*input_width=*/8,
+      /*input_depth=*/192, /*kernel_height=*/3, /*kernel_width=*/3,
+      /*stride=*/1, /*padding=*/1, /*input_partition_height=*/9,
+      /*input_partition_width=*/10, /*output_partition_height=*/7,
+      /*output_partition_width=*/8);
+
+  all_passed &= depthwise_convolution(
+      /*input_height=*/8,
+      /*input_width=*/8,
+      /*input_depth=*/192,
+      /*kernel_height=*/3,
+      /*kernel_width=*/3,
+      /*stride=*/1,
+      /*padding=*/1,
+      /*input_partition_height=*/9,
+      /*input_partition_width=*/10,
+      /*output_partition_height=*/7,
+      /*output_partition_width=*/8);
+
+  all_passed &= depthwise_convolution(
+      /*input_height=*/16, /*input_width=*/16,
+      /*input_depth=*/8, /*kernel_height=*/3, /*kernel_width=*/3,
+      /*stride=*/1, /*padding=*/0, /*input_partition_height=*/5,
+      /*input_partition_width=*/16, /*output_partition_height=*/3,
+      /*output_partition_width=*/14);
+
+  all_passed &= depthwise_convolution(
+      /*input_height=*/32, /*input_width=*/32,
+      /*input_depth=*/32, /*kernel_height=*/3, /*kernel_width=*/3,
+      /*stride=*/1, /*padding=*/1, /*input_partition_height=*/5,
+      /*input_partition_width=*/18, /*output_partition_height=*/3,
+      /*output_partition_width=*/16);
+
+  // Stride 2 test cases
+  all_passed &= depthwise_convolution(
+      /*input_height=*/8, /*input_width=*/8,
+      /*input_depth=*/8, /*kernel_height=*/3,
+      /*kernel_width=*/3,
+      /*stride=*/2, /*padding=*/0,
+      /*input_partition_height=*/8,
+      /*input_partition_width=*/8, /*output_partition_height=*/3,
+      /*output_partition_width=*/3);
+
+  all_passed &= depthwise_convolution(
+      /*input_height=*/8, /*input_width=*/8,
+      /*input_depth=*/8, /*kernel_height=*/3, /*kernel_width=*/3,
+      /*stride=*/2, /*padding=*/0, /*input_partition_height=*/8,
+      /*input_partition_width=*/8, /*output_partition_height=*/3,
+      /*output_partition_width=*/3);
+
+  all_passed &= depthwise_convolution(
+      /*input_height=*/4, /*input_width=*/4,
+      /*input_depth=*/8, /*kernel_height=*/3, /*kernel_width=*/3,
+      /*stride=*/2, /*padding=*/0, /*input_partition_height=*/4,
+      /*input_partition_width=*/4, /*output_partition_height=*/1,
+      /*output_partition_width=*/1);
+
+  all_passed &= depthwise_convolution(
+      /*input_height=*/8, /*input_width=*/8,
+      /*input_depth=*/8, /*kernel_height=*/3, /*kernel_width=*/3,
+      /*stride=*/2, /*padding=*/0, /*input_partition_height=*/8,
+      /*input_partition_width=*/8, /*output_partition_height=*/3,
+      /*output_partition_width=*/3);
+
+  all_passed &= depthwise_convolution(
+      /*input_height=*/8, /*input_width=*/8,
+      /*input_depth=*/8, /*kernel_height=*/3, /*kernel_width=*/3,
+      /*stride=*/1, /*padding=*/0, /*input_partition_height=*/8,
+      /*input_partition_width=*/8, /*output_partition_height=*/6,
+      /*output_partition_width=*/6);
+
+  all_passed &= depthwise_convolution(
+      /*input_height=*/9, /*input_width=*/9,
+      /*input_depth=*/8, /*kernel_height=*/3, /*kernel_width=*/3,
+      /*stride=*/2, /*padding=*/0, /*input_partition_height=*/9,
+      /*input_partition_width=*/9, /*output_partition_height=*/4,
+      /*output_partition_width=*/4);
+
+  all_passed &= depthwise_convolution(
+      /*input_height=*/5, /*input_width=*/5,
+      /*input_depth=*/8, /*kernel_height=*/3, /*kernel_width=*/3,
+      /*stride=*/2, /*padding=*/0, /*input_partition_height=*/5,
+      /*input_partition_width=*/5, /*output_partition_height=*/2,
+      /*output_partition_width=*/2);
+
+  // print if all passed
+  if (all_passed) {
+    printf("All tests passed\n");
+  } else {
+    printf("Some tests failed\n");
+  }
 }
 int main() {
   // Initialize systems
@@ -445,7 +612,6 @@ int main() {
   debug_init_isviewer();
   debug_init_usblog();
 
-  // Initialize the "vec" library (see vec.h)
   vec_init();
   printf("Init'd RSP overlay\n");
 

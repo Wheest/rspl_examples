@@ -12,9 +12,9 @@ state
   u32 addrOut; // starting point of the output
   u32 out_part_h_s;
   u32 out_part_w_s;
-  u32 w_stride_slice_s;
+  u32 w_window_stride_s;
   u32 w_slide_byte_offset_s;
-  u32 h_slide_byte_offset_s;
+  u32 h_window_stride_s;
 }
 
 command<0> DMAInWeights(u32 addressMatW, u32 size)
@@ -28,22 +28,22 @@ command<0> DMAInWeights(u32 addressMatW, u32 size)
  * Set the arguments for the convolution
  * @param out_part_h Height of output parition
  * @param out_part_w Width of output parition
- * @param w_stride_slice
+ * @param w_window_stride
  * @param w_slide_byte_offset Byte offset to slide the weights
- * @param h_slide_byte_offset Byte offset to slide the input
+ * @param h_window_stride Byte offset to slide the input
  * @param w_size Size of the weights in bytes
  * @param x_size Size of the input in bytes
  */
-command<3> SetArgs(u32 out_part_h, u32 out_part_w, u32 w_stride_slice,
-                   u32 w_slide_byte_offset, u32<$s0> h_slide_byte_offset,
+command<3> SetArgs(u32 out_part_h, u32 out_part_w, u32 w_window_stride,
+                   u32 w_slide_byte_offset, u32<$s0> h_window_stride,
                    u32<$s1> w_size, u32<$s2> x_size)
 {
   out_part_h &= 0xFFFFFF;
   store(out_part_h, out_part_h_s);
   store(out_part_w, out_part_w_s);
-  store(w_stride_slice, w_stride_slice_s);
+  store(w_window_stride, w_window_stride_s);
   store(w_slide_byte_offset, w_slide_byte_offset_s);
-  store(h_slide_byte_offset, h_slide_byte_offset_s);
+  store(h_window_stride, h_window_stride_s);
 
   // Store the start address of the input data and output data
   u32 dataAddr = DATA;
@@ -52,9 +52,9 @@ command<3> SetArgs(u32 out_part_h, u32 out_part_w, u32 w_stride_slice,
   dataAddr &= 0xFFFFFFF0;
   store(dataAddr, addrX);
 
+  dataAddr += x_size;
   dataAddr += 0x0F;
   dataAddr &= 0xFFFFFFF0;
-  dataAddr += x_size;
   store(dataAddr, addrOut);
 }
 
@@ -82,16 +82,15 @@ command<2> DepthConv(u32 addressMatOut, u32 out_size)
 
   const u32 out_part_w = load(out_part_w_s);
   const u32 out_part_h = load(out_part_h_s);
-  const u32 w_stride_slice = load(w_stride_slice_s);
+  const u32 w_window_stride = load(w_window_stride_s);
   const u32 w_slide_byte_offset = load(w_slide_byte_offset_s);
-  const u32 h_slide_byte_offset = load(h_slide_byte_offset_s);
+  const u32 h_window_stride = load(h_window_stride_s);
 
 
   // VU contains 32 128-bit SIMD registers
   // Load our 3x3(x8) kernels
   vec16 Wslice00 = load_vec_s8(DATA, 0x00);
   Wslice00 = Wslice00 >> 8;
-  // printf("RSP: Wslice00: %v\n", Wslice00);
   vec16 Wslice01 = load_vec_s8(DATA, 0x08);
   Wslice01 = Wslice01 >> 8;
   vec16 Wslice02 = load_vec_s8(DATA, 0x10);
@@ -118,7 +117,6 @@ command<2> DepthConv(u32 addressMatOut, u32 out_size)
 
   // Wait for input slice to be loaded
   dma_await();
-  // printf("w_slide_byte_offset: %v\n", w_slide_byte_offset);
 
   // Iterates over the height of the input matrix
   loop {
@@ -131,7 +129,7 @@ command<2> DepthConv(u32 addressMatOut, u32 out_size)
 
       vec16 Xslice0 = load_vec_s8(xpos);
       Xslice0 >>= 8;
-      // printf("RSP: Xslice0: %v\n", Xslice0);
+      // printf("RSP: Xslice0.x: %v\n", Xslice0.x);
 
       vec16 Xslice1 = load_vec_s8(xpos, 0x08);
       Xslice1 >>= 8;
@@ -139,7 +137,7 @@ command<2> DepthConv(u32 addressMatOut, u32 out_size)
       vec16 Xslice2 = load_vec_s8(xpos, 0x10);
       Xslice2 >>= 8;
 
-      xpos += w_slide_byte_offset; // ({{in_w}}+2*{{padding}})*8*2
+      xpos += w_slide_byte_offset;
 
       vec16 Xslice3 = load_vec_s8(xpos);
       Xslice3 >>= 8;
@@ -150,7 +148,7 @@ command<2> DepthConv(u32 addressMatOut, u32 out_size)
       vec16 Xslice5 = load_vec_s8(xpos, 0x10);
       Xslice5 >>= 8;
 
-      xpos += w_slide_byte_offset; // ({{in_w}}+2*{{padding}})*8*2;
+      xpos += w_slide_byte_offset;
 
       vec16 Xslice6 = load_vec_s8(xpos);
       Xslice6 >>= 8;
@@ -171,25 +169,17 @@ command<2> DepthConv(u32 addressMatOut, u32 out_size)
       yslice = Xslice7 +* Wslice21;
       yslice = Xslice8 +* Wslice22;
 
-      // Print the first value of each Xslice from 0-8
-      // printf("RSP: %v, %v, %v\n", Xslice0.x, Xslice1.x, Xslice2.x);
-      // printf("RSP: %v, %v, %v\n", Xslice3.x, Xslice4.x, Xslice5.x);
-      // printf("RSP: %v, %v, %v\n", Xslice6.x, Xslice7.x, Xslice8.x);
-      //printf("RSP: %v, %v, \n", Xslice0.x, Xslice1.x);
-
       store(yslice, out_pos); // we could just DMA this back at this point
-      // printf("RSP: yslice: %v\n", yslice);
+
       // increment
-      xpos_base += w_stride_slice; // (8*2*{{stride}} 8 channels * 2 bytes * {{stride}} stride)
-      out_pos += 32; // 8*4
+      xpos_base += w_window_stride;
+      out_pos += 32;
       iters_w += 1;
 
     } while (iters_w < out_part_w)
-      // } while (iters_w < 0)
-      xpos_base += h_slide_byte_offset; // {{kdim_w}}*8*2 (-16)
+    xpos_base += h_window_stride;
     iters_h += 1;
   } while (iters_h < out_part_h)
-    // } while (iters_h < 0)
 
   dma_out(DATA_OUT, addressMatOut, osize);
 }
