@@ -4,8 +4,10 @@ import math
 
 
 def get_partition_size(in_shape, padding, stride):
+    # in_shape = (batch, in_h, in_w, in_c)
     in_w = in_shape[2]
     in_h = in_shape[1]
+    assert in_w == in_h
     in_dbytes = 2
     out_dbytes = 4
     kdim_h = 3
@@ -85,7 +87,7 @@ def get_partition_size(in_shape, padding, stride):
         (in_h + 2 * padding - overlap) / (input_part_height - overlap)
     )
     num_h_partitions_2 = math.ceil(
-        (in_h + 2 * padding - overlap) / (input_part_height - 1 - overlap)
+        (in_h + 2 * padding - overlap) / max(1, (input_part_height - 1 - overlap))
     )
     print(num_h_partitions, num_h_partitions_2)
 
@@ -103,9 +105,9 @@ def get_partition_size(in_shape, padding, stride):
 
         input_mem = input_part_height * input_part_width * 8 * in_dbytes
         print("1: output_part_height:", output_part_height)
-        output_part_height = (
-            min((in_h + 2 * padding), input_part_height) - kdim_h
-        ) // stride + 1
+        output_part_height = math.floor(
+            (min((in_h + 2 * padding), input_part_height) - kdim_h) / stride + 1
+        )
         print("2: output_part_height:", output_part_height)
         omem = output_part_height * output_part_width * 8 * out_dbytes
 
@@ -155,6 +157,13 @@ get_partition_size(in_shape, padding, stride)
 in_shape = (1, 8, 8, 8)
 padding = 0
 stride = 1
+get_partition_size(in_shape, padding, stride)
+
+
+#
+in_shape = (1, 32, 32, 144)
+padding = 0
+stride = 2
 get_partition_size(in_shape, padding, stride)
 
 

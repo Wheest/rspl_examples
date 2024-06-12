@@ -221,3 +221,14 @@ Similarly, since the sizes of the data and outputs could change, we create a uni
 
 This version adds support for quantisation, where our inputs and weights are `int8`, and our outputs are `int32`.
 It uses techniques seen in the "int32 accumulation" and "int8 expansion" example, as well as the "Unusual accumulation" example.
+
+
+### Depthwise conv2d wide (v7)
+
+This adds support for when the input data is too wide to fit a full partition.
+In this case, we split the data into both horizontal and vertical tiles.
+You can see an example of what this looks like:
+
+<img src="./rsp_depthwise_conv2d_wide/hw_partition_full.png" alt="Example of partitions" width="30%" />
+
+In addition, this version adds a unit testing suite, and support for asymmetric padding.

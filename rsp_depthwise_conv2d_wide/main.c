@@ -13,64 +13,6 @@ DEFINE_RSP_UCODE(rsp_simple);
 
 uint32_t vec_id;
 
-void copy_output_slice_to_full(int32_t *dest, const int32_t *output_pad_part,
-                               const int output_partition_height,
-                               const int output_partition_width,
-                               const int out_w, const int h_slice_num,
-                               const int w_slice_num, const int in_depth,
-                               const int depth_slice_num,
-                               const int max_output_partition_height) {
-  /*
-  Copies a slice into the final destination with the appropriate stride
-  using for-loops.
-  */
-  const int slice_depth = 8; // 8 channels per slice
-  for (int y = 0; y < max_output_partition_height; y++) {
-    for (int x = 0; x < output_partition_width; x++) {
-      // Calculate the initial destination index with offsets and strided gaps
-      int dest_idx_y = h_slice_num * output_partition_height + y;
-      int dest_idx_x = w_slice_num * output_partition_width + x;
-
-      int32_t *dest_ptr =
-          &dest[(dest_idx_y * out_w * in_depth) + (dest_idx_x * in_depth) +
-                (depth_slice_num * slice_depth)];
-      // cast to uint16_t as the RSP puts the upper 16 bits of all 8 elements in
-      // the first 64 bits and the lower 16 bits in the second 64 bits
-      uint16_t *src_ptr =
-          (uint16_t
-               *)&output_pad_part[y * output_partition_width * slice_depth +
-                                  x * slice_depth];
-      for (int c = 0; c < slice_depth; c++) {
-        dest_ptr[c] =
-            ((uint32_t)src_ptr[c] << 16) |
-            src_ptr[c + 8]; // reconstruct from upper and lower 2 bytes
-      }
-    }
-  }
-}
-
-void offline_weight_reshape(const int8_t *kernels, int8_t *kernel_reshape,
-                            int kdim_h, int kdim_w, int out_c,
-                            int split_factor) {
-  int split_size = kdim_h * kdim_w * split_factor;
-  int num_splits = out_c / split_factor;
-
-  for (int split = 0; split < num_splits; ++split) {
-    for (int row = 0; row < kdim_h; ++row) {
-      for (int col = 0; col < kdim_w; ++col) {
-        for (int ch = 0; ch < split_factor; ++ch) {
-          int src_idx = (row * kdim_w * out_c) + (col * out_c) +
-                        (split * split_factor) + ch;
-          int dest_idx = (split * split_size) + (row * kdim_w * split_factor) +
-                         (col * split_factor) + ch;
-
-          kernel_reshape[dest_idx] = kernels[src_idx];
-        }
-      }
-    }
-  }
-}
-
 enum {
   DMAWeights = 0x0,
   DMAInputs = 0x1,
@@ -89,7 +31,8 @@ void generate_padded_slices_with_depth_slice(
     int8_t *data, int8_t *padded_input_partition, const int h_slice_num,
     const int w_slice_num, const int depth_slice_num, const int in_h,
     const int in_w, const int in_depth, const int slice_height,
-    const int slice_width, const int padding, const int overlap) {
+    const int slice_width, const int pad_t, const int pad_l,
+    const int overlap) {
 
   // start_[h/w]_pad are the starting indices of the slice in the (virtual)
   // fully padded input data.  We then need to deterimine the starting indices
@@ -98,8 +41,8 @@ void generate_padded_slices_with_depth_slice(
   const int start_w_pad = w_slice_num * (slice_width - overlap);
 
   // The starting indices of the non-padded values in the slice
-  const int slice_start_h = (start_h_pad == 0) ? padding : 0;
-  const int slice_start_w = (start_w_pad == 0) ? padding : 0;
+  const int slice_start_h = (start_h_pad == 0) ? pad_t : 0;
+  const int slice_start_w = (start_w_pad == 0) ? pad_l : 0;
   const int num_h_elems = slice_height - slice_start_h;
   const int num_w_elems = slice_width - slice_start_w;
 
@@ -114,10 +57,10 @@ void generate_padded_slices_with_depth_slice(
          sizeof(int8_t) * slice_height * slice_width * 8);
 
   // The starting indices in the full non-padded input data
-  int h_start = (start_h_pad == 0) ? start_h_pad : start_h_pad - padding;
+  int h_start = (start_h_pad == 0) ? start_h_pad : start_h_pad - pad_t;
   int h_end = MIN(h_start + num_h_elems, in_h);
 
-  int w_start = (start_w_pad == 0) ? start_w_pad : start_w_pad - padding;
+  int w_start = (start_w_pad == 0) ? start_w_pad : start_w_pad - pad_l;
   int w_end = MIN(w_start + num_w_elems, in_w);
 
   // Copy data to the padded slice
@@ -140,7 +83,8 @@ RSPDepthConvTiledPadded(int32_t *dest, int8_t *input_data, int8_t *weights,
                         int input_partition_height, int in_h, int in_w,
                         int in_c, int out_h, int out_w, int k_h, int k_w,
                         int output_partition_height, int input_partition_width,
-                        int output_partition_width, int padding, int stride) {
+                        int output_partition_width, int pad_t, int pad_b,
+                        int pad_l, int pad_r, int stride) {
   // Requires that weights have been reshaped offline to be
   // (out_c // 8, kernel_height * kernel_width, 8)
   extern uint32_t vec_id;
@@ -196,10 +140,10 @@ RSPDepthConvTiledPadded(int32_t *dest, int8_t *input_data, int8_t *weights,
              w_window_stride, w_slide_byte_offset, h_window_stride, w_part_size,
              in_part_size);
 
-  const int num_h_partitions = ceil((float)(in_h + 2 * padding - overlap) /
+  const int num_h_partitions = ceil((float)(in_h + pad_t + pad_b - overlap) /
                                     (input_partition_height - overlap));
 
-  const int num_w_partitions = ceil((float)(in_w + 2 * padding - overlap) /
+  const int num_w_partitions = ceil((float)(in_w + pad_l + pad_r - overlap) /
                                     (input_partition_width - overlap));
 
   for (int depth_slice = 0; depth_slice < in_c / 8; depth_slice++) {
@@ -218,7 +162,7 @@ RSPDepthConvTiledPadded(int32_t *dest, int8_t *input_data, int8_t *weights,
     // Generate first input  slice
     generate_padded_slices_with_depth_slice(
         input_data, input_pad_part, 0, 0, depth_slice, in_h, in_w, in_c,
-        input_partition_height, input_partition_width, padding, overlap);
+        input_partition_height, input_partition_width, pad_t, pad_l, overlap);
 
     // Copy-in the first slice
     rspq_write(vec_id, DMAInputs, PhysicalAddr(input_pad_part), in_part_size);
@@ -245,12 +189,12 @@ RSPDepthConvTiledPadded(int32_t *dest, int8_t *input_data, int8_t *weights,
           generate_padded_slices_with_depth_slice(
               input_data, input_pad_part, h_slice_count, w_slice_count + 1,
               depth_slice, in_h, in_w, in_c, input_partition_height,
-              input_partition_width, padding, overlap);
+              input_partition_width, pad_t, pad_l, overlap);
         } else if ((h_slice_count + 1) < num_h_partitions) {
           generate_padded_slices_with_depth_slice(
               input_data, input_pad_part, h_slice_count + 1, 0, depth_slice,
               in_h, in_w, in_c, input_partition_height, input_partition_width,
-              padding, overlap);
+              pad_t, pad_l, overlap);
         }
 
         // Copy back the processed partition to the final outputs,
@@ -287,34 +231,36 @@ RSPDepthConvTiledPadded(int32_t *dest, int8_t *input_data, int8_t *weights,
   free_uncached(output_pad_part);
 }
 
-bool depthwise_convolution(const int input_height, const int input_width,
-                           const int input_depth, const int kernel_height,
-                           const int kernel_width, const int stride,
-                           const int padding, const int input_partition_height,
-                           const int input_partition_width,
-                           const int output_partition_height,
-                           const int output_partition_width) {
-  int output_height = (input_height - kernel_height + 2 * padding) / stride + 1;
-  int output_width = (input_width - kernel_width + 2 * padding) / stride + 1;
+bool depthwise_convolution_extended_padding(
+    const int input_height, const int input_width, const int input_depth,
+    const int kernel_height, const int kernel_width, const int stride,
+    const int pad_t, const int pad_b, const int pad_l, const int pad_r,
+    const int input_partition_height, const int input_partition_width,
+    const int output_partition_height, const int output_partition_width) {
+  int output_height =
+      (input_height - kernel_height + pad_t + pad_b) / stride + 1;
+  int output_width = (input_width - kernel_width + pad_l + pad_r) / stride + 1;
 
   printf("Allocating arrays for depthwise convolution\n");
   printf("Input dimensions: %d x %d x %d\n", input_height, input_width,
          input_depth);
-  printf("Padding: %d, stride: %d\n", padding, stride);
+  printf("Padding: (%d, %d, %d, %d), stride: %d\n", pad_t, pad_l, pad_b, pad_r,
+         stride);
   printf("Kernel dimensions: %d x %d\n", kernel_height, kernel_width);
   printf("Output shape: %d x %d x %d\n", output_height, output_width,
          input_depth);
 
-  // assert that the partitioning is less than or equal to the input and output
-  if (input_partition_height > (input_height + 2 * padding)) {
+  // assert that the partitioning is less than or equal to the input and
+  // output
+  if (input_partition_height > (input_height + pad_t + pad_b)) {
     printf("Error: input_partition_height %d must be less than or equal to "
-           "input_height (%d) + 2*padding\n",
+           "input_height (%d) + pad_t + pad_b\n",
            input_partition_height, input_height);
     return false;
   }
-  if (input_partition_width > (input_width + 2 * padding)) {
+  if (input_partition_width > (input_width + pad_l + pad_r)) {
     printf("Error: input_partition_width %d must be less than or equal to "
-           "input_width (%d) + 2*padding\n",
+           "input_width (%d) + pad_l + pad_r\n",
            input_partition_width, input_width);
     return false;
   }
@@ -380,7 +326,7 @@ bool depthwise_convolution(const int input_height, const int input_width,
   sequential_depthwise_conv2d_simd(input_data, output_target, weights,
                                    input_height, input_width, input_depth,
                                    kernel_height, kernel_width, output_height,
-                                   output_width, stride, padding);
+                                   output_width, stride, pad_t, pad_l);
   unsigned long time_spent_cpu = get_ticks() - start;
   printf("\nCPU baseline time (CPU ticks): %lu\n", time_spent_cpu);
 
@@ -390,7 +336,7 @@ bool depthwise_convolution(const int input_height, const int input_width,
       output, input_data, weights_reshape, input_partition_height, input_height,
       input_width, input_depth, output_height, output_width, kernel_height,
       kernel_width, output_partition_height, input_partition_width,
-      output_partition_width, padding, stride);
+      output_partition_width, pad_t, pad_b, pad_l, pad_r, stride);
   rspq_wait();
   unsigned long time_spent_rsp = get_ticks() - start;
   printf("\nRSP time (CPU ticks): %lu\n", time_spent_rsp);
@@ -423,6 +369,24 @@ bool depthwise_convolution(const int input_height, const int input_width,
   free_uncached(output);
   printf("---------------------------------\n\n");
   return differences == 0;
+}
+
+bool depthwise_convolution(const int input_height, const int input_width,
+                           const int input_depth, const int kernel_height,
+                           const int kernel_width, const int stride,
+                           const int padding, const int input_partition_height,
+                           const int input_partition_width,
+                           const int output_partition_height,
+                           const int output_partition_width) {
+  // this is the case where our padding is symmetric
+  const int pad_t = padding;
+  const int pad_b = padding;
+  const int pad_l = padding;
+  const int pad_r = padding;
+  return depthwise_convolution_extended_padding(
+      input_height, input_width, input_depth, kernel_height, kernel_width,
+      stride, pad_t, pad_b, pad_l, pad_r, input_partition_height,
+      input_partition_width, output_partition_height, output_partition_width);
 }
 
 void tests() {
@@ -597,6 +561,23 @@ void tests() {
       /*stride=*/2, /*padding=*/0, /*input_partition_height=*/5,
       /*input_partition_width=*/5, /*output_partition_height=*/2,
       /*output_partition_width=*/2);
+
+  // Assymetric padding tests
+  all_passed &= depthwise_convolution_extended_padding(
+      /*input_height=*/8, /*input_width=*/8,
+      /*input_depth=*/8, /*kernel_height=*/3, /*kernel_width=*/3,
+      /*stride=*/1, /*pad_t=*/1, /*pad_b=*/0, /*pad_l=*/1,
+      /*pad_r=*/0, /*input_partition_height=*/9,
+      /*input_partition_width=*/9, /*output_partition_height=*/7,
+      /*output_partition_width=*/7);
+
+  all_passed &= depthwise_convolution_extended_padding(
+      /*input_height=*/8, /*input_width=*/8,
+      /*input_depth=*/8, /*kernel_height=*/3, /*kernel_width=*/3,
+      /*stride=*/1, /*pad_t=*/0, /*pad_b=*/1, /*pad_l=*/0,
+      /*pad_r=*/1, /*input_partition_height=*/9,
+      /*input_partition_width=*/9, /*output_partition_height=*/7,
+      /*output_partition_width=*/7);
 
   // print if all passed
   if (all_passed) {

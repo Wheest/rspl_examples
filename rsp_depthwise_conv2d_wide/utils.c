@@ -5,7 +5,7 @@ void sequential_depthwise_conv2d_simd(const int8_t *input_data, int32_t *output,
                                       int input_width, int input_depth,
                                       int kernel_height, int kernel_width,
                                       int output_height, int output_width,
-                                      int stride, int padding) {
+                                      int stride, int pad_t, int pad_l) {
   int vector_size = 8; // Simulate a SIMD vector size of 8
   for (int h = 0; h < output_height; h++) {
     for (int w = 0; w < output_width; w++) {
@@ -17,8 +17,8 @@ void sequential_depthwise_conv2d_simd(const int8_t *input_data, int32_t *output,
           for (int j = 0; j < kernel_width; j++) {
             for (int v = 0; v < vector_size;
                  v++) { // This loop simulates the SIMD operation
-              int input_h = h * stride + i - padding;
-              int input_w = w * stride + j - padding;
+              int input_h = h * stride + i - pad_t;
+              int input_w = w * stride + j - pad_l;
               if (input_h >= 0 && input_w >= 0 && input_h < input_height &&
                   input_w < input_width) {
                 vector_sum[v] +=
@@ -35,6 +35,64 @@ void sequential_depthwise_conv2d_simd(const int8_t *input_data, int32_t *output,
         for (int v = 0; v < vector_size; v++) {
           output[(h * output_width + w) * input_depth + c + v] = vector_sum[v];
         }
+      }
+    }
+  }
+}
+
+void offline_weight_reshape(const int8_t *kernels, int8_t *kernel_reshape,
+                            int kdim_h, int kdim_w, int out_c,
+                            int split_factor) {
+  int split_size = kdim_h * kdim_w * split_factor;
+  int num_splits = out_c / split_factor;
+
+  for (int split = 0; split < num_splits; ++split) {
+    for (int row = 0; row < kdim_h; ++row) {
+      for (int col = 0; col < kdim_w; ++col) {
+        for (int ch = 0; ch < split_factor; ++ch) {
+          int src_idx = (row * kdim_w * out_c) + (col * out_c) +
+                        (split * split_factor) + ch;
+          int dest_idx = (split * split_size) + (row * kdim_w * split_factor) +
+                         (col * split_factor) + ch;
+
+          kernel_reshape[dest_idx] = kernels[src_idx];
+        }
+      }
+    }
+  }
+}
+
+void copy_output_slice_to_full(int32_t *dest, const int32_t *output_pad_part,
+                               const int output_partition_height,
+                               const int output_partition_width,
+                               const int out_w, const int h_slice_num,
+                               const int w_slice_num, const int in_depth,
+                               const int depth_slice_num,
+                               const int max_output_partition_height) {
+  /*
+  Copies a slice into the final destination with the appropriate stride
+  using for-loops.
+  */
+  const int slice_depth = 8; // 8 channels per slice
+  for (int y = 0; y < max_output_partition_height; y++) {
+    for (int x = 0; x < output_partition_width; x++) {
+      // Calculate the initial destination index with offsets and strided gaps
+      int dest_idx_y = h_slice_num * output_partition_height + y;
+      int dest_idx_x = w_slice_num * output_partition_width + x;
+
+      int32_t *dest_ptr =
+          &dest[(dest_idx_y * out_w * in_depth) + (dest_idx_x * in_depth) +
+                (depth_slice_num * slice_depth)];
+      // cast to uint16_t as the RSP puts the upper 16 bits of all 8 elements in
+      // the first 64 bits and the lower 16 bits in the second 64 bits
+      uint16_t *src_ptr =
+          (uint16_t
+               *)&output_pad_part[y * output_partition_width * slice_depth +
+                                  x * slice_depth];
+      for (int c = 0; c < slice_depth; c++) {
+        dest_ptr[c] =
+            ((uint32_t)src_ptr[c] << 16) |
+            src_ptr[c + 8]; // reconstruct from upper and lower 2 bytes
       }
     }
   }
